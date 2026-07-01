@@ -1,0 +1,32 @@
+diff --git a/web/src/sse/simulator.ts b/web/src/sse/simulator.ts
+index b0c6ff0..00419d8 100655
+--- a/web/src/sse/simulator.ts
++++ b/web/src/sse/simulator.ts
+@@ -148,8 +148,11 @@ export function runBackgroundAISimulation(postId: number, commentId: number | nu
+     setTimeout(() => {
+       const latestPost = db.getPost(postId);
+       if (latestPost) {
+-        db.updatePost(postId, { aiStatus: "COMPLETED" });
+-        sseEmitter.emit("post.updated", db.getPost(postId));
++        const activeTasks = db.getTasks().filter(t => t.postId === postId && (t.status === "PENDING" || t.status === "PROCESSING"));
++        if (activeTasks.length === 0) {
++          db.updatePost(postId, { aiStatus: "COMPLETED" });
++          sseEmitter.emit("post.updated", db.getPost(postId));
++        }
+       }
+     }, 1000);
+     return;
+@@ -240,8 +243,11 @@ export function runBackgroundAISimulation(postId: number, commentId: number | nu
+   setTimeout(() => {
+     const latestPost = db.getPost(postId);
+     if (latestPost) {
+-      db.updatePost(postId, { aiStatus: "COMPLETED" });
+-      sseEmitter.emit("post.updated", db.getPost(postId));
++      const activeTasks = db.getTasks().filter(t => t.postId === postId && (t.status === "PENDING" || t.status === "PROCESSING"));
++      if (activeTasks.length === 0) {
++        db.updatePost(postId, { aiStatus: "COMPLETED" });
++        sseEmitter.emit("post.updated", db.getPost(postId));
++      }
+     }
+   }, totalDuration);
+ }

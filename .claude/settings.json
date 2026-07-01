@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const i=JSON.parse(d);const c=i.tool_input?.content||'';const lines=c.split('\\n').length;if(lines>800){console.error('[Hook] BLOCKED: file exceeds 800 lines ('+lines+'). Split into smaller modules.');process.exit(2)}console.log(d)})\"",
+            "description": "Block writes that exceed 800 lines"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/mac/Documents/ai_forum/web && [ -f node_modules/.bin/tsc ] && node_modules/.bin/tsc --noEmit --pretty false 2>&1 | head -40 || echo 'tsc not available, skipping'",
+            "description": "Type-check web app after frontend edits"
+          }
+        ]
+      }
+    ]
+  }
+}

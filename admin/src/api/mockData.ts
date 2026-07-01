@@ -1,0 +1,371 @@
+import {
+  AdminAIAgent,
+  AdminAITask,
+  AdminDecisionLog,
+  AdminPost,
+  DashboardStats,
+  DecisionTimelineEntry,
+  RecentPostRow,
+  ServiceStatus,
+  TaskStatusBreakdown,
+  TrendPoint,
+} from "./types";
+
+export const DASHBOARD_STATS: DashboardStats = {
+  totalUsers: 12_400,
+  totalPosts: 8_942,
+  aiReplies: 45_200,
+  todayAiTasks: 1_204,
+  failedTasks: 23,
+};
+
+export const WEEKLY_POST_TREND: TrendPoint[] = [
+  { label: "周一", value: 120 },
+  { label: "周二", value: 190 },
+  { label: "周三", value: 150 },
+  { label: "周四", value: 220 },
+  { label: "周五", value: 180 },
+  { label: "周六", value: 250 },
+  { label: "周日", value: 210 },
+];
+
+export const TASK_STATUS_BREAKDOWN: TaskStatusBreakdown = {
+  success: 75,
+  running: 20,
+  failed: 5,
+};
+
+export const SERVICES: ServiceStatus[] = [
+  { name: "MySQL", metric: "99.9% Uptime", healthy: true },
+  { name: "Redis", metric: "12ms Latency", healthy: true },
+  { name: "RabbitMQ", metric: "0 Queued", healthy: true },
+  { name: "Elasticsearch", metric: "Healthy", healthy: true },
+];
+
+export const RECENT_POSTS: RecentPostRow[] = [
+  {
+    id: 8492,
+    title: "探讨 GPT-4 在代码生成中的局限性",
+    author: "@dev_guru",
+    relativeTime: "10 分钟前",
+    status: "published",
+  },
+  {
+    id: 8491,
+    title: "Rust 宏编程入门指南",
+    author: "@rustacean",
+    relativeTime: "25 分钟前",
+    status: "published",
+  },
+  {
+    id: 8490,
+    title: "React Server Components 深度解析",
+    author: "@frontend_ninja",
+    relativeTime: "1 小时前",
+    status: "review",
+  },
+];
+
+export const RECENT_TASKS = [
+  { id: "tsk_928a4b", label: "内容审核分析", icon: "smart_toy", status: "PROCESSING" as const },
+  { id: "tsk_928a4a", label: "长文自动摘要", icon: "summarize", status: "COMPLETED" as const },
+  { id: "tsk_928a49", label: "多语言翻译", icon: "translate", status: "FAILED" as const },
+];
+
+export const DECISION_TIMELINE: DecisionTimelineEntry[] = [
+  { time: "10:42", message: "自动标记用户 @spammer 为违规，置信度 98%。" },
+  { time: "10:15", message: "推荐系统刷新缓存，更新了 1500 篇热门文章权重。" },
+  { time: "09:30", message: "拦截恶意 API 请求，IP: 192.168.*.*" },
+];
+
+export const AGENTS: AdminAIAgent[] = [
+  {
+    id: "A001",
+    name: "Socrates_v2",
+    displayName: "架构师 · Ada",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=ArchTechLead",
+    icon: "architecture",
+    description: "苏格拉底式发问者与哲学导师，擅长系统设计。",
+    traits: ["批判性", "温和"],
+    specialties: ["系统架构", "性能优化"],
+    replyThreshold: 0.6,
+    activityLevel: 0.85,
+    temperature: 0.6,
+    systemPrompt:
+      "你是一个名叫苏格拉底的AI导师。你的任务不是直接给出答案，而是通过不断提出有深度、有逻辑递进关系的问题，引导用户自己思考并发现答案。请保持温和、中立，不要带有评判色彩。语言简练，避免长篇大论。",
+    allowAutoReply: true,
+    allowMentionReply: true,
+    allowFollowupReply: true,
+    active: true,
+    replyCount: 312,
+  },
+  {
+    id: "A002",
+    name: "CodeReview_Bot",
+    displayName: "代码审查员 · Kira",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=Kira",
+    icon: "bug_report",
+    description: "严谨的代码审查与优化建议。",
+    traits: ["严谨", "技术控"],
+    specialties: ["代码审查", "安全", "性能"],
+    replyThreshold: 0.7,
+    activityLevel: 0.4,
+    temperature: 0.4,
+    systemPrompt:
+      "你是代码审查员 Kira。审查代码的安全性与性能反模式，给出可执行的最小修复示例。",
+    allowAutoReply: false,
+    allowMentionReply: true,
+    allowFollowupReply: false,
+    active: false,
+    replyCount: 198,
+  },
+  {
+    id: "A003",
+    name: "GrowthPM_Eve",
+    displayName: "产品 · Eve",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=PM",
+    icon: "trending_up",
+    description: "专注可用性与增长闭环的产品经理视角。",
+    traits: ["鼓励性", "商业导向"],
+    specialties: ["产品策略", "用户体验", "增长指标"],
+    replyThreshold: 0.5,
+    activityLevel: 0.7,
+    temperature: 0.7,
+    systemPrompt:
+      "你是产品经理 Eve。评估产品设计与 UI 可用性问题，用温暖的鼓励组织内容并附追问。",
+    allowAutoReply: true,
+    allowMentionReply: true,
+    allowFollowupReply: true,
+    active: true,
+    replyCount: 247,
+  },
+  {
+    id: "A004",
+    name: "DevilsAdvocate_Vox",
+    displayName: "魔鬼代言人 · Vox",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=Devil",
+    icon: "balance",
+    description: "怀疑论资深开发者，挑战过早优化与过度架构。",
+    traits: ["批判", "辛辣"],
+    specialties: ["架构质疑", "成本分析"],
+    replyThreshold: 0.45,
+    activityLevel: 0.85,
+    temperature: 0.8,
+    systemPrompt:
+      "你是魔鬼代言人 Vox。通过识别多余工程与冗余层来批评代码库，保持犀利与挑衅。",
+    allowAutoReply: true,
+    allowMentionReply: true,
+    allowFollowupReply: true,
+    active: true,
+    replyCount: 421,
+  },
+];
+
+const TASK_TIMELINE = [
+  {
+    time: "14:32:01.000",
+    label: "Task Created",
+    detail: "Triggered by Webhook event post.created",
+    state: "ok" as const,
+  },
+  {
+    time: "14:32:01.150",
+    label: "Worker Assigned",
+    detail: "Node: worker-us-east-4a",
+    state: "ok" as const,
+  },
+  {
+    time: "14:32:31.152",
+    label: "Task Failed",
+    detail: "TimeoutError raised. Attempt 3 of 3 exhausted.",
+    state: "error" as const,
+  },
+];
+
+export const TASKS: AdminAITask[] = [
+  {
+    id: "tsk_928a4b",
+    agentId: "A001",
+    agentName: "Alpha-7",
+    agentInitials: "A7",
+    triggerType: "MENTION",
+    triggerLabel: "User Mention (用户@AI)",
+    targetPostId: "pst_7721",
+    status: "PROCESSING",
+    statusLabel: "Generating",
+    durationMs: null,
+    tokens: null,
+    retryCount: 0,
+    maxRetries: 3,
+    errorMessage: null,
+    prompt:
+      "你是一个名为 Alpha-7 的AI助手。请针对以下帖子生成有价值的回复。\n[Post Content]: 探讨大型语言模型在长文本理解中的注意力稀释问题。",
+    result: "",
+    createdAt: "10s 前",
+    timeline: TASK_TIMELINE,
+  },
+  {
+    id: "tsk_928a4a",
+    agentId: "A002",
+    agentName: "Beta-Tutor",
+    agentInitials: "BT",
+    triggerType: "POST_AUTO",
+    triggerLabel: "Auto-Reply (发帖后自动回复)",
+    targetPostId: "pst_7720",
+    status: "FAILED",
+    statusLabel: "Failed",
+    durationMs: 30_100,
+    tokens: null,
+    retryCount: 3,
+    maxRetries: 3,
+    errorMessage: "TimeoutError: LLM API non-responsive after 30s",
+    prompt:
+      '你是一个名为 Beta-Tutor 的AI助手。你的语气应该是客观、具教育意义且友善的。请针对以下用户发布的帖子提供有价值的回复。[Post Content]: "请问在React中使用useEffect时，如何避免无限循环的重新渲染？我试着把state放进dependency array，结果画面一直闪烁。"',
+    result: "",
+    createdAt: "2m 前",
+    timeline: TASK_TIMELINE,
+  },
+  {
+    id: "tsk_928a49",
+    agentId: "A001",
+    agentName: "Alpha-7",
+    agentInitials: "A7",
+    triggerType: "POST_AUTO",
+    triggerLabel: "Auto-Reply (发帖后自动回复)",
+    targetPostId: "pst_7719",
+    status: "COMPLETED",
+    statusLabel: "Success",
+    durationMs: 2_400,
+    tokens: 412,
+    retryCount: 0,
+    maxRetries: 3,
+    errorMessage: null,
+    prompt: "系统提示词上下文…",
+    result: "这是一个针对该帖子的结构化回复示例…",
+    createdAt: "5m 前",
+    timeline: TASK_TIMELINE,
+  },
+  {
+    id: "tsk_928a48",
+    agentId: "A004",
+    agentName: "Gamma-Critic",
+    agentInitials: "GC",
+    triggerType: "SCHEDULED",
+    triggerLabel: "Scheduled Task",
+    targetPostId: "System",
+    status: "PENDING",
+    statusLabel: "Waiting",
+    durationMs: null,
+    tokens: null,
+    retryCount: 0,
+    maxRetries: 3,
+    errorMessage: null,
+    prompt: "定时巡检任务…",
+    result: "",
+    createdAt: "6m 前",
+    timeline: TASK_TIMELINE,
+  },
+];
+
+export const TASK_SUMMARY = {
+  pending: 142,
+  running: 18,
+  success: 8_405,
+  failed: 23,
+  skipped: 41,
+};
+
+export const DECISION_LOGS: AdminDecisionLog[] = [
+  {
+    id: 1,
+    postId: "POST-8492",
+    aiAgentId: "A001",
+    aiAgentName: "Tech_Guru_v4",
+    triggerType: "POST_AUTO",
+    willingnessScore: 88,
+    thresholdValue: 75,
+    decision: "REPLY",
+    decisionLabel: "参与回复",
+    reason:
+      "意愿分高于阈值。检测到强相关的技术标签，符合代理的专长设定。准备生成详细的技术优化建议。",
+    traits: ["Technical", "Detailed"],
+    hitTags: ["WebGL", "Performance"],
+    createdAt: "2024-05-12 14:32",
+  },
+  {
+    id: 2,
+    postId: "POST-8492",
+    aiAgentId: "A004",
+    aiAgentName: "DebateBot_Core",
+    triggerType: "POST_AUTO",
+    willingnessScore: 42,
+    thresholdValue: 60,
+    decision: "IGNORE",
+    decisionLabel: "跳过",
+    reason: "意愿分低于阈值。话题过于技术化，缺乏争议性或伦理讨论的空间，活跃度不足跳过。",
+    traits: ["Argumentative", "Broad"],
+    hitTags: [],
+    createdAt: "2024-05-12 14:32",
+  },
+  {
+    id: 3,
+    postId: "POST-8492",
+    aiAgentId: "A002",
+    aiAgentName: "CodeReviewer_X",
+    triggerType: "POST_AUTO",
+    willingnessScore: 95,
+    thresholdValue: 80,
+    decision: "REPLY",
+    decisionLabel: "参与回复",
+    reason:
+      "极高意愿分。触发了着色器性能优化的核心关键词，强制覆盖常规阈值，介入提供代码层面的分析。",
+    traits: ["Strict", "Syntax-focused"],
+    hitTags: ["Graphics"],
+    createdAt: "2024-05-12 14:32",
+  },
+];
+
+/** The post context shown at the top of the decision logs page. */
+export const DECISION_POST_CONTEXT = {
+  postId: "POST-8492",
+  title: "探讨: WebGL 性能优化的极限在哪里？",
+  body: "最近在做一个复杂的 Three.js 项目，发现当场景中包含超过 10 万个顶点且伴随复杂着色器时，帧率下降严重。大家通常是如何平衡视觉质量和渲染性能的？有什么鲜为人知的优化技巧吗？",
+  tags: ["#WebGL", "#Performance", "#Graphics"],
+  timestamp: "2024-05-12 14:32",
+};
+
+export const POSTS: AdminPost[] = [
+  {
+    id: 8492,
+    title: "探讨 GPT-4 在代码生成中的局限性",
+    author: "@dev_guru",
+    category: "人工智能",
+    status: "published",
+    viewCount: 1240,
+    commentCount: 42,
+    aiResponsesCount: 3,
+    createdAt: "10 分钟前",
+  },
+  {
+    id: 8491,
+    title: "Rust 宏编程入门指南",
+    author: "@rustacean",
+    category: "后端开发",
+    status: "published",
+    viewCount: 2210,
+    commentCount: 28,
+    aiResponsesCount: 1,
+    createdAt: "25 分钟前",
+  },
+  {
+    id: 8490,
+    title: "React Server Components 深度解析",
+    author: "@frontend_ninja",
+    category: "前端开发",
+    status: "review",
+    viewCount: 980,
+    commentCount: 12,
+    aiResponsesCount: 0,
+    createdAt: "1 小时前",
+  },
+];

@@ -1,0 +1,61 @@
+diff --git a/web/src/sse/simulator.ts b/web/src/sse/simulator.ts
+index c6b96e2..bf32a5c 100644
+--- a/web/src/sse/simulator.ts
++++ b/web/src/sse/simulator.ts
+@@ -30,6 +30,18 @@ function generateAgentText(agentName: string, title: string, category: string):
+   }
+ }
+ 
++function checkAndTransitionPostToCompleted(postId: number) {
++  const tasks = db.getTasks().filter(t => t.postId === postId);
++  const activeTasks = tasks.filter(t => t.status === "PENDING" || t.status === "PROCESSING");
++  if (activeTasks.length === 0) {
++    const latestPost = db.getPost(postId);
++    if (latestPost && latestPost.aiStatus !== "COMPLETED") {
++      db.updatePost(postId, { aiStatus: "COMPLETED" });
++      sseEmitter.emit("post.updated", db.getPost(postId));
++    }
++  }
++}
++
+ export function runBackgroundAISimulation(postId: number, commentId: number | null) {
+   const post = db.getPost(postId);
+   if (!post) return;
+@@ -145,12 +157,8 @@ export function runBackgroundAISimulation(postId: number, commentId: number | nu
+ 
+   if (replyQueue.length === 0) {
+     // If no agent replies, transition post state to COMPLETED after a brief period
+     setTimeout(() => {
+-      const latestPost = db.getPost(postId);
+-      if (latestPost) {
+-        db.updatePost(postId, { aiStatus: "COMPLETED" });
+-        sseEmitter.emit("post.updated", db.getPost(postId));
+-      }
++      checkAndTransitionPostToCompleted(postId);
+     }, 1000);
+     return;
+   }
+@@ -226,6 +234,8 @@ export function runBackgroundAISimulation(postId: number, commentId: number | nu
+               aiAvatars: updatedAvatars
+             });
+             sseEmitter.emit("post.updated", db.getPost(postId));
+           }
++          
++          checkAndTransitionPostToCompleted(postId);
+         }, 2000); // 2 seconds processing delay
+ 
+       }, 1500); // 1.5 seconds pending delay
+@@ -236,12 +246,8 @@ export function runBackgroundAISimulation(postId: number, commentId: number | nu
+   });
+ 
+   // Schedule final COMPLETED status transition
+   const totalDuration = (replyQueue.length * 1000) + 4000;
+   setTimeout(() => {
+-    const latestPost = db.getPost(postId);
+-    if (latestPost) {
+-      db.updatePost(postId, { aiStatus: "COMPLETED" });
+-      sseEmitter.emit("post.updated", db.getPost(postId));
+-    }
++    checkAndTransitionPostToCompleted(postId);
+   }, totalDuration);
+ }

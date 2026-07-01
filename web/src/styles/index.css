@@ -1,0 +1,272 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Cohere / Synthetica design tokens.
+ * Single source of truth for every color used in the app — Tailwind maps
+ * these onto the `cohere.*` namespace in tailwind.config.js.
+ */
+@layer base {
+  :root {
+    --c-primary: #000000;
+    --c-black: #000000;
+    --c-ink: #212121;
+    --c-deep-green: #003c33;
+    --c-dark-navy: #071829;
+
+    --c-canvas: #ffffff;
+    --c-background: #fbf9f4;
+    --c-surface: #fbf9f4;
+    --c-surface-lowest: #ffffff;
+    --c-surface-low: #f5f3ee;
+    --c-surface-container: #f0eee9;
+    --c-surface-high: #eae8e3;
+    --c-surface-highest: #e4e2dd;
+    --c-surface-variant: #e4e2dd;
+    --c-soft-stone: #eeece7;
+    --c-pale-green: #edfce9;
+    --c-pale-blue: #f1f5ff;
+
+    --c-hairline: #d9d9dd;
+    --c-border-light: #e5e7eb;
+    --c-card-border: #f2f2f2;
+
+    --c-on-surface: #1b1c19;
+    --c-on-surface-variant: #47464b;
+    --c-on-primary: #ffffff;
+    --c-on-secondary: #ffffff;
+    --c-on-secondary-container: #3b6d63;
+
+    --c-muted: #93939f;
+    --c-slate: #75758a;
+    --c-body-muted: #616161;
+
+    --c-secondary: #35675d;
+    --c-secondary-container: #b8ede0;
+    --c-action-blue: #1863dc;
+    --c-focus-blue: #4c6ee6;
+    --c-info-blue: #417ef8;
+    --c-coral: #ff7759;
+    --c-coral-soft: #ffad9b;
+    --c-form-focus: #9b60aa;
+
+    --c-error: #ba1a1a;
+    --c-error-container: #ffdad6;
+    --c-success: #edfce9;
+
+    --ease-cohere: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-cohere-background text-cohere-on-surface font-sans antialiased;
+    font-size: 16px;
+    line-height: 1.5;
+    /* Chinese body text must stay readable; never go below 16px. */
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Material Symbols base — every icon derives its optical size/weight here. */
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    user-select: none;
+  }
+
+  .material-symbols-outlined.fill {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+
+  ::selection {
+    background: var(--c-secondary-container);
+    color: var(--c-on-secondary-container);
+  }
+
+  /* Thin, restrained scrollbars — Cohere is mostly flat, shadows are avoided. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-hairline) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--c-hairline);
+    border-radius: 4px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* Typography helpers derived from the Stitch type scale. */
+  .font-display-lg { @apply font-display text-display-lg font-normal tracking-[-0.02em] leading-none; }
+  .font-headline-xl { @apply font-sans text-headline-xl font-normal tracking-[-0.015em] leading-[1.15]; }
+  .font-headline-lg { @apply font-sans text-headline-lg font-normal tracking-[-0.01em] leading-[1.2]; }
+  .font-headline-lg-bold { @apply font-sans text-headline-lg font-bold tracking-[-0.01em] leading-[1.2]; }
+  .font-feature-title { @apply font-sans text-feature-title font-medium tracking-tight; }
+  .font-body-large { @apply font-sans text-body-large font-normal; }
+  .font-body-main { @apply font-sans text-body-main font-normal; }
+  .font-caption { @apply font-sans text-caption font-normal; }
+  .font-micro { @apply font-sans text-micro font-normal; }
+  .font-label-mono { @apply font-mono text-label-mono font-normal tracking-[0.06em] uppercase; }
+  .font-label-mono-bold { @apply font-mono text-label-mono font-semibold tracking-[0.06em] uppercase; }
+
+  /* Primary near-black pill CTA — the single highest-priority action. */
+  .btn-primary {
+    @apply font-label-mono-bold bg-cohere-primary text-cohere-on-primary rounded-pill px-lg py-sm transition-all duration-300 ease-cohere hover:bg-cohere-ink hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue focus-visible:ring-offset-2 focus-visible:ring-offset-cohere-background disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  /* Outlined pill — secondary actions, filter pills, taxonomy controls. */
+  .btn-pill-outline {
+    @apply font-label-mono-bold bg-transparent text-cohere-primary border border-cohere-hairline rounded-pill px-lg py-sm transition-all duration-300 ease-cohere hover:border-cohere-secondary hover:text-cohere-secondary hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue;
+  }
+
+  /* Quiet text-link action. */
+  .btn-link {
+    @apply font-label-mono text-cohere-muted hover:text-cohere-primary transition-all duration-300 ease-cohere focus:outline-none focus-visible:underline;
+  }
+
+  .form-control {
+    @apply w-full rounded border border-cohere-hairline bg-white p-2 font-body-main text-cohere-on-surface placeholder:text-cohere-muted transition-all duration-300 ease-cohere focus:border-cohere-form-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue;
+  }
+
+  /* Card surfaces — bordered, never shadowed by default. */
+  .card-base {
+    @apply bg-cohere-surface-lowest border border-cohere-hairline rounded-lg transition-all duration-500 ease-cohere;
+  }
+
+  .card-surface-low {
+    @apply bg-cohere-surface-low border border-cohere-hairline rounded-lg transition-all duration-500 ease-cohere;
+  }
+
+  .feed-tab {
+    @apply font-label-mono text-label-mono text-cohere-muted pb-sm px-xs whitespace-nowrap transition-all duration-300 ease-cohere hover:text-cohere-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue;
+  }
+  .feed-tab.active {
+    @apply font-label-mono-bold text-cohere-primary border-b-2 border-cohere-primary;
+  }
+
+  /* Status dot used across AI processing indicators. */
+  .status-dot {
+    @apply inline-block w-1.5 h-1.5 rounded-full;
+  }
+
+  /* Sanitized markdown body — typography for AI replies and post content. */
+  .prose-cohere {
+    @apply text-cohere-ink font-body-main space-y-md;
+  }
+  .prose-cohere p { @apply leading-relaxed; }
+  .prose-cohere strong { @apply font-semibold text-cohere-on-surface; }
+  .prose-cohere ul { @apply list-disc pl-lg space-y-xs; }
+  .prose-cohere ol { @apply list-decimal pl-lg space-y-xs; }
+  .prose-cohere code {
+    @apply font-mono text-[13px] bg-cohere-surface-container px-xs py-xxs rounded-xs text-cohere-on-surface;
+  }
+  .prose-cohere pre {
+    @apply font-mono text-[13px] bg-cohere-surface-low border border-cohere-hairline p-md rounded-sm text-cohere-on-surface overflow-x-auto;
+  }
+  .prose-cohere pre code { @apply bg-transparent p-0; }
+  .prose-cohere a { @apply text-cohere-action-blue underline underline-offset-2 hover:text-cohere-focus-blue; }
+  .prose-cohere blockquote {
+    @apply border-l-2 border-cohere-hairline pl-md text-cohere-body-muted italic;
+  }
+}
+
+@layer utilities {
+  /* Respect reduced motion everywhere we use animation. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  .transition-premium {
+    transition: all 400ms var(--ease-cohere);
+  }
+
+  .transition-spring {
+    transition: all 500ms var(--ease-spring);
+  }
+
+  .animate-reveal-up {
+    animation: reveal-up 600ms var(--ease-cohere) forwards;
+  }
+
+  @keyframes reveal-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-pulse-soft {
+    animation: pulse-soft 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  @keyframes pulse-soft {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(0.9);
+    }
+  }
+
+  .animate-float-slow-left {
+    animation: float-slow-left 25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .animate-float-slow-right {
+    animation: float-slow-right 28s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes float-slow-left {
+    0%, 100% {
+      transform: translate(0, 0) scale(1);
+    }
+    33% {
+      transform: translate(30px, -50px) scale(1.15);
+    }
+    66% {
+      transform: translate(-20px, 20px) scale(0.95);
+    }
+  }
+
+  @keyframes float-slow-right {
+    0%, 100% {
+      transform: translate(0, 0) scale(1);
+    }
+    33% {
+      transform: translate(-45px, 45px) scale(0.9);
+    }
+    66% {
+      transform: translate(25px, -25px) scale(1.1);
+    }
+  }
+}

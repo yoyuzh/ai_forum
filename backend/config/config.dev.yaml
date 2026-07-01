@@ -1,0 +1,55 @@
+# Development configuration for ai-forum backend.
+# Secrets MUST be injected via environment variables (architecture §14.1).
+# Copy .env.example to .env and fill in real values, or export them in your shell.
+
+server:
+  port: 8080
+  mode: debug
+
+mysql:
+  host: mysql
+  port: 3306
+  username: root
+  password: ${MYSQL_PASSWORD}
+  database: ai_forum
+
+redis:
+  addr: redis:6379
+  password: ""
+  db: 0
+
+rabbitmq:
+  url: amqp://guest:guest@rabbitmq:5672/
+
+elasticsearch:
+  addresses:
+    - http://elasticsearch:9200
+
+jwt:
+  secret: ${JWT_SECRET}
+  expire_hours: 168
+
+internal_api:
+  token: ${INTERNAL_API_TOKEN}
+
+ai:
+  provider: openai
+  model: gpt-4o-mini
+  api_key: ${AI_API_KEY}
+  max_concurrency: 4
+  request_per_second: 2
+  burst: 2
+
+worker:
+  ai_reply_concurrency: 4
+  tagging_concurrency: 2
+  search_index_concurrency: 2
+  notification_concurrency: 4
+
+hot_score:
+  refresh_interval_seconds: 30
+  batch_size: 200
+
+log:
+  level: info
+  encoding: json

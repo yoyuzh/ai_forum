@@ -1,0 +1,40 @@
+diff --git a/web/src/sse/simulator.ts b/web/src/sse/simulator.ts
+--- a/web/src/sse/simulator.ts
++++ b/web/src/sse/simulator.ts
+@@ -145,9 +145,12 @@ export function runBackgroundAISimulation(postId: number, commentId: number | nu
+   if (replyQueue.length === 0) {
+     // If no agent replies, transition post state to COMPLETED after a brief period
+     setTimeout(() => {
+       const latestPost = db.getPost(postId);
+       if (latestPost) {
+-        db.updatePost(postId, { aiStatus: "COMPLETED" });
+-        sseEmitter.emit("post.updated", db.getPost(postId));
++        const hasActiveTasks = db.getTasks().some(
++          t => t.postId === postId && (t.status === "PENDING" || t.status === "PROCESSING")
++        );
++        if (!hasActiveTasks) {
++          db.updatePost(postId, { aiStatus: "COMPLETED" });
++          sseEmitter.emit("post.updated", db.getPost(postId));
++        }
+       }
+     }, 1000);
+     return;
+   }
+@@ -238,9 +241,12 @@ export function runBackgroundAISimulation(postId: number, commentId: number | nu
+   // Schedule final COMPLETED status transition
+   const totalDuration = (replyQueue.length * 1000) + 4000;
+   setTimeout(() => {
+     const latestPost = db.getPost(postId);
+     if (latestPost) {
+-      db.updatePost(postId, { aiStatus: "COMPLETED" });
+-      sseEmitter.emit("post.updated", db.getPost(postId));
++      const hasActiveTasks = db.getTasks().some(
++        t => t.postId === postId && (t.status === "PENDING" || t.status === "PROCESSING")
++      );
++      if (!hasActiveTasks) {
++        db.updatePost(postId, { aiStatus: "COMPLETED" });
++        sseEmitter.emit("post.updated", db.getPost(postId));
++      }
+     }
+   }, totalDuration);
+ }
