@@ -247,13 +247,58 @@ func TestProcessedEventsSchemaMatchesSpec(t *testing.T) {
 	require.Error(t, err, "duplicate (event_id, consumer_name) must violate the unique key")
 }
 
+func TestAIDomainSchemaAndSeedMatchesP6(t *testing.T) {
+	db, m := newTestDB(t)
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		t.Fatalf("m.Up failed: %v", err)
+	}
+	ctx := context.Background()
+
+	for table, columns := range map[string][]string{
+		"ai_agents": {
+			"id", "name", "enabled", "reply_threshold", "activity_level",
+			"allow_auto_reply", "allow_mention", "allow_followup", "is_fallback",
+		},
+		"ai_agent_tag_preferences": {
+			"id", "ai_agent_id", "tag_type", "tag_name", "weight",
+		},
+		"decision_logs": {
+			"id", "post_id", "comment_id", "ai_agent_id", "trigger_type",
+			"willingness_score", "threshold_value", "decision", "reason", "hit_tags", "created_at",
+		},
+	} {
+		for _, column := range columns {
+			var count int
+			require.NoError(t, db.GetContext(ctx, &count, `
+				SELECT COUNT(*) FROM information_schema.columns
+				WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`, table, column))
+			assert.Equal(t, 1, count, "%s.%s must exist", table, column)
+		}
+	}
+
+	var enabledAgents int
+	require.NoError(t, db.GetContext(ctx, &enabledAgents, `SELECT COUNT(*) FROM ai_agents WHERE enabled = TRUE`))
+	assert.GreaterOrEqual(t, enabledAgents, 3, "P6 dev seed must include at least 3 enabled agents")
+
+	var fallbackAgents int
+	require.NoError(t, db.GetContext(ctx, &fallbackAgents, `SELECT COUNT(*) FROM ai_agents WHERE is_fallback = TRUE`))
+	assert.GreaterOrEqual(t, fallbackAgents, 1, "P6 dev seed must include a fallback observer")
+
+	var preferenceCount int
+	require.NoError(t, db.GetContext(ctx, &preferenceCount, `SELECT COUNT(*) FROM ai_agent_tag_preferences`))
+	assert.GreaterOrEqual(t, preferenceCount, 5, "P6 dev seed must include tag preferences")
+}
+
 // TestSeedDevAdmin verifies 000004 leaves exactly one admin user and no AI
 // rows (AI tables do not exist yet — P6 owns them), and that down reverses
 // cleanly (spec: dev-seed-data).
 func TestSeedDevAdmin(t *testing.T) {
 	db, m := newTestDB(t)
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		t.Fatalf("m.Up failed: %v", err)
+	if err := m.Down(); err != nil && err != migrate.ErrNoChange {
+		t.Fatalf("m.Down baseline failed: %v", err)
+	}
+	if err := m.Migrate(4); err != nil && err != migrate.ErrNoChange {
+		t.Fatalf("m.Migrate(4) failed: %v", err)
 	}
 	ctx := context.Background()
 

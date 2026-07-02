@@ -1,4 +1,52 @@
 services:
+  api-server:
+    build:
+      context: ./backend
+    command: ["./api-server"]
+    environment: &backend-env
+      SERVER_MODE: debug
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: ai_forum_root
+      MYSQL_DATABASE: ai_forum
+      REDIS_ADDR: redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      ES_ADDRESSES: http://elasticsearch:9200
+      JWT_SECRET: local-dev-jwt-secret
+      INTERNAL_API_TOKEN: local-dev-internal-token
+      AI_API_KEY: local-dev-ai-key
+    expose:
+      - "8080"
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+      - elasticsearch
+
+  worker-service:
+    build:
+      context: ./backend
+    command: ["./worker-service"]
+    environment: *backend-env
+    depends_on:
+      - api-server
+      - mysql
+      - redis
+      - rabbitmq
+      - elasticsearch
+
+  outbox-publisher:
+    build:
+      context: ./backend
+    command: ["./outbox-publisher"]
+    environment: *backend-env
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+      - elasticsearch
+
   mysql:
     image: mysql:8.4
     environment:
@@ -16,9 +64,6 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management
-    environment:
-      RABBITMQ_DEFAULT_USER: ai_forum
-      RABBITMQ_DEFAULT_PASS: ai_forum
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -29,5 +74,20 @@ services:
       discovery.type: single-node
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: -Xms512m -Xmx512m
+    # Install the IK Chinese analyzer plugin at container start. IK is an
+    # install-time requirement, not rebuildable data: ES without IK cannot do
+    # Chinese search, and the search.NewES readiness gate FAILS when IK is
+    # absent (P2 design D2). The plugin version MUST match the ES image
+    # version (8.14.3). The `elasticsearch-plugin list` check makes the step
+    # idempotent so container restarts do not re-download. --batch skips the
+    # interactive confirmation prompt.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if ! bin/elasticsearch-plugin list | grep -q analysis-ik; then
+          bin/elasticsearch-plugin install --batch https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-8.14.3.zip
+        fi
+        exec docker-entrypoint.sh
     ports:
       - "9200:9200"

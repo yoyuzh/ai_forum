@@ -21,6 +21,7 @@ var envBindings = map[string]string{
 	"REDIS_PASSWORD":       "redis.password",
 	"REDIS_DB":              "redis.db",
 	"RABBITMQ_URL":         "rabbitmq.url",
+	"ES_ADDRESSES":         "elasticsearch.addresses",
 	"JWT_SECRET":           "jwt.secret",
 	"JWT_EXPIRE_HOURS":     "jwt.expire_hours",
 	"INTERNAL_API_TOKEN":   "internal_api.token",

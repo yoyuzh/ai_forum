@@ -1,0 +1,2 @@
+DELETE FROM ai_agents WHERE id IN (1001, 1002, 1003);
+DROP TABLE IF EXISTS ai_agents;

@@ -1,2 +1,6 @@
-// Package like contains like forum module placeholders.
 package like
+
+type key struct {
+	userID int64
+	postID int64
+}

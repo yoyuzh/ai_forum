@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -12,7 +13,7 @@ import (
 // outbox row on the same transaction as the business write natural (design D1).
 // Verified at compile time by the assertions below.
 type DBTX interface {
-	sqlx.ExtContext
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
 	SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
 }

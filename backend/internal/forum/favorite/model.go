@@ -1,2 +1,6 @@
-// Package favorite contains favorite forum module placeholders.
 package favorite
+
+type key struct {
+	userID int64
+	postID int64
+}

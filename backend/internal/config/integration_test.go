@@ -50,3 +50,13 @@ func TestLoadDevConfigAndInstantiateLogger(t *testing.T) {
 		ailogger.FieldRequestID("p0-smoke"),
 	)
 }
+
+func TestLoadESAddressesFromEnvCSV(t *testing.T) {
+	devPath := filepath.Join("..", "..", "config", "config.dev.yaml")
+	t.Setenv("ES_ADDRESSES", "http://es1:9200,http://es2:9200")
+
+	cfg, err := aiconfig.Load(devPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"http://es1:9200", "http://es2:9200"}, cfg.Elasticsearch.Addresses)
+}
