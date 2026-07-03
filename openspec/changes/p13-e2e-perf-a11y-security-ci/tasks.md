@@ -43,5 +43,5 @@
 
 ## 10. Verification
 - [x] 10.1 `npm run test` in e2e/ green across web/admin/integration/sanity
-- [ ] 10.2 All non-functional gates pass; CI green on a sample PR
+- [x] 10.2 All non-functional gates pass; CI green on a sample PR
 - [x] 10.3 Operational pre-flight checklist (env vars, ports, migrations, seed, search rebuild command/task) documented in `e2e/README.md`
