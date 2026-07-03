@@ -18,7 +18,7 @@ export default function RelatedDiscussions({ discussions }: RelatedDiscussionsPr
               idx < discussions.length - 1 ? "border-b border-cohere-hairline pb-sm" : ""
             }`}
           >
-            <MaterialIcon name="link" size={16} className="mt-[2px] text-cohere-muted" />
+            <MaterialIcon name="link" size={16} className="mt-[2px] text-cohere-on-surface-variant" />
             {d.title}
           </li>
         ))}

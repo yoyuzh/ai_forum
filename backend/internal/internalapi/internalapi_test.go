@@ -10,6 +10,7 @@ import (
 
 	"ai-forum/backend/internal/config"
 	"ai-forum/backend/internal/logger"
+	"ai-forum/backend/internal/sse"
 )
 
 func TestHandlerAcceptsValidInternalToken(t *testing.T) {
@@ -30,6 +31,30 @@ func TestHandlerAcceptsValidInternalToken(t *testing.T) {
 	}
 	if !published {
 		t.Fatal("expected event to be published to hub")
+	}
+}
+
+func TestHandlerDispatchesToRealHub(t *testing.T) {
+	hub := sse.NewHub()
+	ch, cancel := hub.Subscribe(42)
+	defer cancel()
+	h := NewHandler(config.InternalAPIConfig{Token: "secret-token"}, hub, testLogger(t, nil))
+	req := httptest.NewRequest(http.MethodPost, "/internal/posts/42/events", strings.NewReader(`{"type":"ai_reply_completed"}`))
+	req.Header.Set("X-Internal-Token", "secret-token")
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+	select {
+	case got := <-ch:
+		if got.Type != "ai_reply_completed" {
+			t.Fatalf("event = %#v", got)
+		}
+	default:
+		t.Fatal("expected hub subscriber event")
 	}
 }
 

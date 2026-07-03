@@ -44,7 +44,18 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const currentUser = useUserStore((s) => s.currentUser);
   const updateCurrentUser = useUserStore((s) => s.updateCurrentUser);
+  const setCurrentUser = useUserStore((s) => s.setCurrentUser);
   const clearAuthed = useUserStore((s) => s.clearAuthed);
+
+  const { data: serverProfile } = useQuery({
+    queryKey: ["user-profile"],
+    queryFn: api.user.getProfile,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (serverProfile) setCurrentUser(serverProfile);
+  }, [serverProfile, setCurrentUser]);
 
   // Aggregated stats — recomputed from posts/comments, never persisted.
   const { data: stats } = useQuery({

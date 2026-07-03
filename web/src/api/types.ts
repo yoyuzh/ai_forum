@@ -187,6 +187,7 @@ export interface UserProfile {
 
 export interface AuthResult {
   user: UserProfile;
+  token?: string;
 }
 
 /** Aggregated profile statistics computed from posts/comments, never stored. */
@@ -195,4 +196,87 @@ export interface UserStats {
   commentCount: number;
   likeCount: number;
   aiReplyCount: number;
+}
+
+export interface NotificationItem {
+  id: number;
+  type: string;
+  title: string;
+  body?: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface AIStatusSnapshot {
+  completedCount: number;
+  runningCount: number;
+  overallStatus: "IDLE" | "RUNNING" | "COMPLETED";
+}
+
+export interface ApiClient {
+  posts: {
+    list: () => Promise<Post[]>;
+    listByFilter: (tab: FeedTab, query?: string, tag?: string) => Promise<Post[]>;
+    get: (id: number) => Promise<Post>;
+    create: (
+      post: Omit<
+        Post,
+        | "id"
+        | "aiStatus"
+        | "aiResponsesCount"
+        | "aiAvatars"
+        | "createdAt"
+        | "viewCount"
+        | "commentCount"
+        | "likeCount"
+      >,
+    ) => Promise<Post>;
+  };
+  comments: {
+    list: (postId: number) => Promise<Comment[]>;
+    create: (comment: Omit<Comment, "id" | "createdAt" | "likeCount">) => Promise<Comment>;
+  };
+  likes: {
+    likePost: (postId: number) => Promise<void>;
+    unlikePost: (postId: number) => Promise<void>;
+  };
+  favorites: {
+    favoritePost: (postId: number) => Promise<void>;
+    unfavoritePost: (postId: number) => Promise<void>;
+  };
+  agents: {
+    list: () => Promise<AIAgent[]>;
+    get: (id: number) => Promise<AIAgent>;
+    update: (id: number, updates: Partial<AIAgent>) => Promise<AIAgent>;
+  };
+  tasks: { list: () => Promise<AIReplyTask[]> };
+  decisionLogs: {
+    list: () => Promise<AIDecisionLog[]>;
+    listForPost: (postId: number) => Promise<AIDecisionLog[]>;
+  };
+  activities: { list: () => Promise<AIActivity[]> };
+  auth: {
+    login: (identifier: string, password: string) => Promise<AuthResult>;
+    register: (input: {
+      username: string;
+      nickname: string;
+      email: string;
+      password: string;
+    }) => Promise<AuthResult>;
+    logout: () => Promise<void>;
+  };
+  user: {
+    getProfile: () => Promise<UserProfile>;
+    getStats: (username: string) => Promise<UserStats>;
+    updateProfile: (updates: Partial<UserProfile>) => Promise<UserProfile>;
+  };
+  notifications: {
+    list: () => Promise<NotificationItem[]>;
+    unreadCount: () => Promise<number>;
+    markRead: (id: number) => Promise<void>;
+    markAllRead: () => Promise<void>;
+  };
+  aiStatus: {
+    get: (postId: number) => Promise<AIStatusSnapshot>;
+  };
 }

@@ -1,0 +1,93 @@
+name: P13 Gates
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: ai_forum
+          MYSQL_ROOT_PASSWORD: ai_forum_root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pai_forum_root"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache-dependency-path: backend/go.sum
+      - name: Backend tests
+        working-directory: backend
+        run: go test ./...
+      - name: Backend vet
+        working-directory: backend
+        run: go vet ./...
+      - name: Govulncheck
+        working-directory: backend
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: Fresh DB migrate
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: '3306'
+          MYSQL_USERNAME: root
+          MYSQL_PASSWORD: ai_forum_root
+          MYSQL_DATABASE: ai_forum
+        run: make migrate-up
+      - name: P5 contract ownership
+        working-directory: backend
+        run: go test ./internal/event ./internal/task
+      - name: P13 implementation completeness
+        working-directory: backend
+        run: go run ./tools/check-p13-completeness
+      - name: Migration ownership
+        working-directory: backend
+        run: go run ./tools/check-migration-ownership
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            admin/package-lock.json
+      - name: Web lint and build
+        working-directory: web
+        run: npm ci && npm run lint && npm run build
+      - name: Admin lint and build
+        working-directory: admin
+        run: npm ci && npm run lint && npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install Playwright
+        working-directory: e2e
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Start live stack
+        run: ./scripts/dev-up.sh
+      - name: E2E
+        working-directory: e2e
+        run: npm run test
+      - name: Stop live stack
+        if: always()
+        run: ./scripts/dev-down.sh

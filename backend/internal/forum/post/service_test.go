@@ -92,6 +92,22 @@ func TestServiceReadUpdateDeletePosts(t *testing.T) {
 	}
 }
 
+func TestServiceGetRecordsViewHotCounter(t *testing.T) {
+	var tx DBTX
+	repo := &recordingRepository{id: 42}
+	hot := &recordingHotTracker{}
+	svc := NewService(repo, noopAppend, WithHotTracker(hot))
+
+	if _, err := svc.Get(context.Background(), tx, 42); err != nil {
+		t.Fatal(err)
+	}
+	if hot.postID != 42 || hot.counter != HotCounterView || hot.delta != 1 {
+		t.Fatalf("hot = post %d counter %q delta %d", hot.postID, hot.counter, hot.delta)
+	}
+}
+
+func noopAppend(context.Context, DBTX, outbox.Event) error { return nil }
+
 type recordingRepository struct {
 	id      int64
 	created bool
@@ -127,5 +143,18 @@ func (r *recordingRepository) Update(_ context.Context, _ DBTX, p Post) (Post, e
 
 func (r *recordingRepository) SoftDelete(context.Context, DBTX, int64) error {
 	r.deleted = true
+	return nil
+}
+
+type recordingHotTracker struct {
+	postID  int64
+	counter HotCounter
+	delta   int64
+}
+
+func (h *recordingHotTracker) RecordInteraction(_ context.Context, postID int64, counter HotCounter, delta int64) error {
+	h.postID = postID
+	h.counter = counter
+	h.delta = delta
 	return nil
 }

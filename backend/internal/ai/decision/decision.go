@@ -85,7 +85,7 @@ type DecisionLogger interface {
 }
 
 type ReplyEnqueuer interface {
-	EnqueueGenerateAIReply(ctx context.Context, postID, agentID int64) error
+	EnqueueAutoGenerateAIReply(ctx context.Context, postID, agentID int64) error
 }
 
 type Handler struct {
@@ -153,7 +153,7 @@ func (h *Handler) HandleDecideAIReply(ctx context.Context, postID int64) error {
 		if decision, ok := selectedByID[log.AgentID]; ok {
 			log.Decision = decision
 			log.Reason = "selected"
-			if err := h.enqueuer.EnqueueGenerateAIReply(ctx, postID, log.AgentID); err != nil {
+			if err := h.enqueuer.EnqueueAutoGenerateAIReply(ctx, postID, log.AgentID); err != nil {
 				return err
 			}
 		}
@@ -217,7 +217,7 @@ func (h *SQLHandler) HandleDecideAIReply(ctx context.Context, postID int64) erro
 	}
 	committed = true
 	for _, agentID := range selected {
-		if err := h.enqueuer.EnqueueGenerateAIReply(ctx, postID, agentID); err != nil {
+		if err := h.enqueuer.EnqueueAutoGenerateAIReply(ctx, postID, agentID); err != nil {
 			return err
 		}
 	}
@@ -234,7 +234,7 @@ func (h *SQLHandler) enqueueSelectedFromLogs(ctx context.Context, postID int64) 
 		return fmt.Errorf("list selected decision logs: %w", err)
 	}
 	for _, agentID := range agentIDs {
-		if err := h.enqueuer.EnqueueGenerateAIReply(ctx, postID, agentID); err != nil {
+		if err := h.enqueuer.EnqueueAutoGenerateAIReply(ctx, postID, agentID); err != nil {
 			return err
 		}
 	}

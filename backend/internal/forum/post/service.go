@@ -23,13 +23,28 @@ type UpdateInput struct {
 
 type AppendFunc func(context.Context, DBTX, outbox.Event) error
 
+type HotTracker interface {
+	RecordInteraction(context.Context, int64, HotCounter, int64) error
+}
+
 type Service struct {
 	repo   Repository
 	append AppendFunc
+	hot    HotTracker
 }
 
-func NewService(repo Repository, append AppendFunc) *Service {
-	return &Service{repo: repo, append: append}
+type Option func(*Service)
+
+func WithHotTracker(hot HotTracker) Option {
+	return func(s *Service) { s.hot = hot }
+}
+
+func NewService(repo Repository, append AppendFunc, opts ...Option) *Service {
+	s := &Service{repo: repo, append: append}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *Service) CreatePost(ctx context.Context, tx DBTX, in CreateInput) (Post, error) {
@@ -66,7 +81,16 @@ func (s *Service) Get(ctx context.Context, tx DBTX, postID int64) (Post, error) 
 	if postID <= 0 {
 		return Post{}, fmt.Errorf("invalid post")
 	}
-	return s.repo.Get(ctx, tx, postID)
+	p, err := s.repo.Get(ctx, tx, postID)
+	if err != nil {
+		return Post{}, err
+	}
+	if s.hot != nil {
+		if err := s.hot.RecordInteraction(ctx, postID, HotCounterView, 1); err != nil {
+			return Post{}, err
+		}
+	}
+	return p, nil
 }
 
 func (s *Service) UpdateOwn(ctx context.Context, tx DBTX, in UpdateInput) (Post, error) {

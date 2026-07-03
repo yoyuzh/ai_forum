@@ -44,9 +44,9 @@ export default function AgentEditDrawer({ agentId, onClose }: AgentEditDrawerPro
   useEffect(() => {
     if (agent) {
       setDraft({
-        systemPrompt: agent.systemPrompt,
+        systemPrompt: agent.systemPrompt ?? "",
         activityLevel: agent.activityLevel,
-        temperature: agent.temperature,
+        temperature: agent.temperature ?? 0.6,
         allowAutoReply: agent.allowAutoReply,
         allowMentionReply: agent.allowMentionReply,
         allowFollowupReply: agent.allowFollowupReply,
@@ -133,7 +133,7 @@ export default function AgentEditDrawer({ agentId, onClose }: AgentEditDrawerPro
             <div className="mb-1 flex items-center justify-between font-caption">
               <span>温度值 (Temperature)</span>
               <span className="rounded bg-cohere-surface-variant px-1 font-label-mono text-cohere-primary">
-                {draft.temperature.toFixed(2)}
+                {(draft.temperature ?? 0.6).toFixed(2)}
               </span>
             </div>
             <Slider

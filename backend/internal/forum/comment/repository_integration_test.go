@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/golang-migrate/migrate/v4"
@@ -115,6 +116,38 @@ func TestServiceCreateAndDeleteRollBackCommentAndOutbox(t *testing.T) {
 	}
 	if deleted != 0 || deleteEvents != 0 {
 		t.Fatalf("deleted/deleteEvents = %d/%d, want 0/0", deleted, deleteEvents)
+	}
+}
+
+func TestServiceCreateMentionPersistsMentionAndQueuesAfterCommitIntegration(t *testing.T) {
+	db := newCommentIntegrationDB(t)
+	ctx := context.Background()
+	postID := seedPost(t, db)
+	queue := &recordingAfterCommitQueue{}
+	svc := NewService(NewSQLRepository(), outbox.Append, WithAfterCommit(queue.AfterCommit), WithGenerateEnqueuer(queue), WithMentionLimiter(NewMemoryMentionLimiter(5, time.Minute, time.Now)))
+
+	var commentID int64
+	if err := database.RunInTx(ctx, db, func(tx *sqlx.Tx) error {
+		c, err := svc.Create(ctx, tx, CreateInput{PostID: postID, UserID: 1, Content: "hello @cohere_observer"})
+		if err != nil {
+			return err
+		}
+		commentID = c.ID
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	queue.Run()
+
+	var mentionAgentID int64
+	if err := db.GetContext(ctx, &mentionAgentID, `SELECT mentioned_ai_agent_id FROM comment_mentions WHERE comment_id = ?`, commentID); err != nil {
+		t.Fatal(err)
+	}
+	if mentionAgentID != 1001 {
+		t.Fatalf("mention agent = %d, want 1001", mentionAgentID)
+	}
+	if len(queue.generate) != 1 || queue.generate[0].TriggerType != "MENTION" || queue.generate[0].AIAgentID != 1001 {
+		t.Fatalf("generate = %#v", queue.generate)
 	}
 }
 

@@ -88,6 +88,21 @@ func TestHandlerReadUpdateDeletePosts(t *testing.T) {
 	}
 }
 
+func TestHandlerListEncodesEmptyPostsAsArray(t *testing.T) {
+	svc := &recordingPostService{returnNilList: true}
+	h := NewHandler(svc, func(ctx context.Context, fn func(DBTX) error) error { return fn(nil) })
+	rec := httptest.NewRecorder()
+
+	h.List(rec, httptest.NewRequest(http.MethodGet, "/api/posts", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("body = %q, want []", rec.Body.String())
+	}
+}
+
 type recordingPostService struct {
 	input         CreateInput
 	statusPostID  int64
@@ -95,6 +110,8 @@ type recordingPostService struct {
 	gotPostID     int64
 	update        UpdateInput
 	deletedPostID int64
+	list          []Post
+	returnNilList bool
 }
 
 func (s *recordingPostService) CreatePost(_ context.Context, _ DBTX, in CreateInput) (Post, error) {
@@ -109,6 +126,12 @@ func (s *recordingPostService) UpdateStatus(_ context.Context, _ DBTX, postID in
 }
 
 func (s *recordingPostService) List(context.Context, DBTX) ([]Post, error) {
+	if s.returnNilList {
+		return nil, nil
+	}
+	if s.list != nil {
+		return s.list, nil
+	}
 	return []Post{{ID: 42, AuthorID: 7, Title: "hello", Content: "body", Status: "NORMAL"}}, nil
 }
 

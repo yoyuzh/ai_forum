@@ -19,8 +19,8 @@ export default function AIAgentsPage() {
   const filtered = agents.filter(
     (a) =>
       a.name.toLowerCase().includes(search.toLowerCase()) ||
-      a.id.toLowerCase().includes(search.toLowerCase()) ||
-      a.displayName.includes(search),
+      String(a.id).toLowerCase().includes(search.toLowerCase()) ||
+      (a.displayName ?? "").includes(search),
   );
   const runningCount = filtered.filter((agent) => agent.active).length;
 
@@ -37,7 +37,7 @@ export default function AIAgentsPage() {
       width: 64,
       render: (_: string, record: AdminAIAgent) => (
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cohere-secondary-container text-cohere-on-secondary-container">
-          <MaterialIcon name={record.icon} size={20} />
+          <MaterialIcon name={record.icon ?? "smart_toy"} size={20} />
         </div>
       ),
     },
@@ -48,7 +48,7 @@ export default function AIAgentsPage() {
       render: (_: string, record: AdminAIAgent) => (
         <div className="min-w-0">
           <div className="font-label-mono-bold text-cohere-on-surface">{record.name}</div>
-          <div className="truncate text-cohere-muted">{record.description}</div>
+          <div className="truncate text-cohere-muted">{record.description ?? "AI reply decision agent"}</div>
         </div>
       ),
     },
@@ -56,7 +56,7 @@ export default function AIAgentsPage() {
       title: "特质",
       dataIndex: "traits",
       width: 160,
-      render: (traits: string[]) => (
+      render: (traits: string[] = []) => (
         <div className="flex flex-wrap gap-1">
           {traits.map((t) => (
             <span
@@ -115,7 +115,7 @@ export default function AIAgentsPage() {
       width: 180,
       render: (_: unknown, record: AdminAIAgent) => (
         <div className="flex gap-1">
-          <Button size="small" onClick={() => setEditId(record.id)} icon={<MaterialIcon name="edit" size={16} />}>
+          <Button size="small" onClick={() => setEditId(String(record.id))} icon={<MaterialIcon name="edit" size={16} />}>
             编辑
           </Button>
           <Button

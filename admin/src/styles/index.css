@@ -33,18 +33,18 @@
     --c-on-secondary: #ffffff;
     --c-on-secondary-container: #3b6d63;
 
-    --c-muted: #93939f;
-    --c-slate: #75758a;
+    --c-muted: #1b1c19;
+    --c-slate: #1b1c19;
 
     --c-secondary: #35675d;
     --c-secondary-container: #b8ede0;
     --c-action-blue: #1863dc;
     --c-focus-blue: #4c6ee6;
     --c-info-blue: #417ef8;
-    --c-coral: #ff7759;
+    --c-coral: #a83b24;
     --c-coral-soft: #ffad9b;
 
-    --c-error: #ba1a1a;
+    --c-error: #8f1111;
     --c-error-container: #ffdad6;
     --c-success: #edfce9;
   }

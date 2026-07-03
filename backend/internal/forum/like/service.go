@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"ai-forum/backend/internal/cache"
 	"ai-forum/backend/internal/outbox"
 )
 
@@ -14,14 +15,32 @@ type Repository interface {
 }
 
 type AppendFunc func(context.Context, DBTX, outbox.Event) error
+type HotCounter = cache.HotCounter
+
+const HotCounterLike = cache.HotCounterLike
+
+type HotTracker interface {
+	RecordInteraction(context.Context, int64, HotCounter, int64) error
+}
 
 type Service struct {
 	repo   Repository
 	append AppendFunc
+	hot    HotTracker
 }
 
-func NewService(repo Repository, append AppendFunc) *Service {
-	return &Service{repo: repo, append: append}
+type Option func(*Service)
+
+func WithHotTracker(hot HotTracker) Option {
+	return func(s *Service) { s.hot = hot }
+}
+
+func NewService(repo Repository, append AppendFunc, opts ...Option) *Service {
+	s := &Service{repo: repo, append: append}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *Service) Like(ctx context.Context, tx DBTX, userID, postID int64) error {
@@ -34,6 +53,11 @@ func (s *Service) Like(ctx context.Context, tx DBTX, userID, postID int64) error
 	}
 	if !changed {
 		return nil
+	}
+	if s.hot != nil {
+		if err := s.hot.RecordInteraction(ctx, postID, HotCounterLike, 1); err != nil {
+			return err
+		}
 	}
 	return s.append(ctx, tx, outbox.Event{
 		EventType:     "post.liked",
@@ -53,6 +77,11 @@ func (s *Service) Unlike(ctx context.Context, tx DBTX, userID, postID int64) err
 	}
 	if !changed {
 		return nil
+	}
+	if s.hot != nil {
+		if err := s.hot.RecordInteraction(ctx, postID, HotCounterLike, -1); err != nil {
+			return err
+		}
 	}
 	return s.append(ctx, tx, outbox.Event{
 		EventType:     "post.unliked",

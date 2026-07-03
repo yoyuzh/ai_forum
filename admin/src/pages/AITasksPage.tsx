@@ -7,6 +7,7 @@ import { AdminAITask, TaskStatus } from "../api/types";
 import MaterialIcon from "../components/MaterialIcon";
 import StatusBadge from "../components/StatusBadge";
 import TaskDetailDrawer from "../components/TaskDetailDrawer";
+import { usePermission } from "../hooks/usePermission";
 
 export default function AITasksPage() {
   const { data: tasks = [], isLoading } = useQuery({
@@ -23,12 +24,15 @@ export default function AITasksPage() {
   const [triggerFilter, setTriggerFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
   const [detailId, setDetailId] = useState<string | null>(null);
+  const canRetry = usePermission("ai_task:retry");
 
   const filtered = tasks.filter((t) => {
+    const agentName = t.agentName ?? t.aiAgentName ?? "";
+    const targetPostId = t.targetPostId ?? String(t.postId ?? "");
     if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
-    if (agentFilter !== "ALL" && t.agentName !== agentFilter) return false;
+    if (agentFilter !== "ALL" && agentName !== agentFilter) return false;
     if (triggerFilter !== "ALL" && t.triggerType !== triggerFilter) return false;
-    if (search && !t.id.toLowerCase().includes(search.toLowerCase()) && !t.targetPostId.toLowerCase().includes(search.toLowerCase()))
+    if (search && !String(t.id).toLowerCase().includes(search.toLowerCase()) && !targetPostId.toLowerCase().includes(search.toLowerCase()))
       return false;
     return true;
   });
@@ -64,10 +68,10 @@ export default function AITasksPage() {
       render: (_: string, record: AdminAITask) => (
         <div className="flex items-center gap-1">
           <div className="flex h-6 w-6 items-center justify-center rounded bg-cohere-secondary-container font-label-mono-bold text-[10px] text-cohere-secondary">
-            {record.agentInitials}
+            {record.agentInitials ?? (record.agentName ?? record.aiAgentName ?? "AI").slice(0, 2)}
           </div>
           <div>
-            <div className="font-label-mono-bold text-cohere-on-surface">{record.agentName}</div>
+            <div className="font-label-mono-bold text-cohere-on-surface">{record.agentName ?? record.aiAgentName}</div>
             <div className="font-micro text-cohere-muted">{record.triggerLabel}</div>
           </div>
         </div>
@@ -104,7 +108,7 @@ export default function AITasksPage() {
       align: "right",
       render: (_: unknown, record: AdminAITask) => (
         <div className="font-label-mono text-micro text-cohere-muted">
-          <div>{record.durationMs !== null ? `${(record.durationMs / 1000).toFixed(1)}s` : "--"}</div>
+          <div>{record.durationMs !== null && record.durationMs !== undefined ? `${(record.durationMs / 1000).toFixed(1)}s` : "--"}</div>
           <div>{record.tokens !== null ? `Tokens: ${record.tokens}` : `Retry: ${record.retryCount} (Max)`}</div>
         </div>
       ),
@@ -114,7 +118,7 @@ export default function AITasksPage() {
       key: "chevron",
       width: 56,
       render: (_: unknown, record: AdminAITask) => (
-        <Button type="text" onClick={() => setDetailId(record.id)} icon={<MaterialIcon name="chevron_right" size={20} />} />
+        <Button type="text" onClick={() => setDetailId(String(record.id))} icon={<MaterialIcon name="chevron_right" size={20} />} />
       ),
     },
   ];
@@ -143,9 +147,11 @@ export default function AITasksPage() {
         </div>
         <div className="flex gap-sm">
           <Button icon={<MaterialIcon name="refresh" size={18} />}>Refresh</Button>
-          <Button type="primary" icon={<MaterialIcon name="play_arrow" size={18} />}>
-            Resume All Failed
-          </Button>
+          {canRetry && (
+            <Button type="primary" icon={<MaterialIcon name="play_arrow" size={18} />}>
+              Resume All Failed
+            </Button>
+          )}
         </div>
       </div>
 
@@ -227,7 +233,7 @@ export default function AITasksPage() {
         />
       </div>
 
-      <TaskDetailDrawer taskId={detailId} onClose={() => setDetailId(null)} />
+      <TaskDetailDrawer taskId={detailId} onClose={() => setDetailId(null)} canRetry={canRetry} />
     </div>
   );
 }

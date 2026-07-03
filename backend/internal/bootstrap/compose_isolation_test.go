@@ -12,11 +12,11 @@ func TestDockerComposeKeepsAPIServerInternalOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(body)
-	api := sliceService(text, "api-server:", "worker-service:")
+	api := sliceService(text, "api-server:")
 	if !strings.Contains(api, "expose:") || strings.Contains(api, "ports:") {
 		t.Fatalf("api-server must use expose and no ports:\n%s", api)
 	}
-	worker := sliceService(text, "worker-service:", "outbox-publisher:")
+	worker := sliceService(text, "worker-service:")
 	if !strings.Contains(worker, "- api-server") {
 		t.Fatalf("worker-service must depend on api-server:\n%s", worker)
 	}
@@ -44,14 +44,19 @@ func TestDockerfilePackagesRBACModel(t *testing.T) {
 	}
 }
 
-func sliceService(text, start, end string) string {
+func sliceService(text, start string) string {
 	i := strings.Index(text, start)
 	if i < 0 {
 		return ""
 	}
-	j := strings.Index(text[i+len(start):], end)
-	if j < 0 {
-		return text[i:]
+	rest := text[i:]
+	lines := strings.Split(rest, "\n")
+	out := []string{lines[0]}
+	for _, line := range lines[1:] {
+		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && strings.HasSuffix(strings.TrimSpace(line), ":") {
+			break
+		}
+		out = append(out, line)
 	}
-	return text[i : i+len(start)+j]
+	return strings.Join(out, "\n")
 }

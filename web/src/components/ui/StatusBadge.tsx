@@ -11,9 +11,9 @@ const CONFIG: Record<
 > = {
   PENDING: {
     label: "AI 待处理",
-    className: "bg-cohere-surface-container text-cohere-muted border border-cohere-hairline",
+    className: "bg-cohere-surface-container text-cohere-on-surface-variant border border-cohere-hairline",
     icon: "schedule",
-    dotClass: "bg-cohere-muted",
+    dotClass: "bg-cohere-on-surface-variant",
   },
   PROCESSING: {
     label: "AI 分析中",
@@ -23,7 +23,7 @@ const CONFIG: Record<
   },
   COMPLETED: {
     label: "AI 已回复",
-    className: "bg-cohere-success text-cohere-secondary",
+    className: "bg-cohere-success text-cohere-deep-green",
     icon: "check_circle",
     dotClass: "bg-cohere-secondary",
   },

@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import MaterialIcon from "../MaterialIcon";
+import { adminApi } from "../../api/client";
 
 interface NavItem {
   to: string;
@@ -11,9 +12,12 @@ const NAV: NavItem[] = [
   { to: "/", label: "仪表盘", icon: "dashboard" },
   { to: "/users", label: "用户管理", icon: "group" },
   { to: "/posts", label: "帖子管理", icon: "article" },
+  { to: "/comments", label: "评论管理", icon: "comment" },
   { to: "/agents", label: "AI 角色管理", icon: "smart_toy" },
   { to: "/tasks", label: "AI 任务", icon: "assignment" },
   { to: "/decisions", label: "AI 决策", icon: "psychology" },
+  { to: "/tags", label: "标签", icon: "sell" },
+  { to: "/preferences", label: "偏好", icon: "tune" },
 ];
 
 /** Fixed left sidebar — operational nav, dense and console-styled. */
@@ -50,6 +54,9 @@ export default function SideNav() {
       <div className="mt-auto border-t border-cohere-hairline pt-lg">
         <button
           type="button"
+          onClick={() => {
+            void adminApi.auth.logout().then(() => location.assign("/login"));
+          }}
           className="flex items-center gap-md rounded-lg px-md py-sm font-label-mono text-cohere-on-surface-variant transition-colors hover:bg-cohere-surface-variant focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue"
         >
           <MaterialIcon name="logout" />

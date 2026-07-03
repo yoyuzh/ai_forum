@@ -1,12 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import type { Comment } from "../api/types";
 import { useSSE } from "../sse/useSSE";
+
+function uniqueById(comments: Comment[]): Comment[] {
+  const seen = new Set<number>();
+  return comments.filter((comment) => {
+    if (seen.has(comment.id)) return false;
+    seen.add(comment.id);
+    return true;
+  });
+}
 
 export function useComments(postId: number) {
   const queryClient = useQueryClient();
 
-  useSSE("comment.created", (newComment: { postId?: number }) => {
+  useSSE("comment.created", (newComment: Comment & { postId?: number }) => {
     if (newComment.postId === postId) {
+      queryClient.setQueryData(["comments", postId], (current: Comment[] = []) =>
+        uniqueById([...current, newComment]),
+      );
       queryClient.invalidateQueries({ queryKey: ["comments", postId] });
     }
   });

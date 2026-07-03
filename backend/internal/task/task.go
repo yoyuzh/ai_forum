@@ -42,8 +42,13 @@ type CronContractInfo struct {
 }
 
 type Handlers struct {
-	TagPost       func(context.Context, int64) error
-	DecideAIReply func(context.Context, int64) error
+	TagPost          func(context.Context, int64) error
+	DecideAIReply    func(context.Context, int64) error
+	GenerateAIReply  func(context.Context, GenerateAIReplyPayload) error
+	JudgeAIFollowup  func(context.Context, JudgeAIFollowupPayload) error
+	SyncSearchIndex  func(context.Context, []byte) error
+	SendNotification func(context.Context, []byte) error
+	RefreshHotScore  func(context.Context) error
 }
 
 type TagPostPayload struct {
@@ -55,11 +60,41 @@ type DecideAIReplyPayload struct {
 }
 
 type GenerateAIReplyPayload struct {
-	PostID    int64 `json:"post_id"`
-	AIAgentID int64 `json:"ai_agent_id"`
+	PostID          int64  `json:"post_id"`
+	ParentCommentID *int64 `json:"parent_comment_id,omitempty"`
+	AIAgentID       int64  `json:"ai_agent_id"`
+	TriggerType     string `json:"trigger_type"`
+}
+
+type JudgeAIFollowupPayload struct {
+	PostID          int64 `json:"post_id"`
+	ParentCommentID int64 `json:"parent_comment_id"`
+	ReplyCommentID  int64 `json:"reply_comment_id"`
+}
+
+type SyncSearchIndexPayload struct {
+	EventID         string `json:"event_id"`
+	EventType       string `json:"event_type"`
+	PostID          int64  `json:"post_id"`
+	CommentID       int64  `json:"comment_id,omitempty"`
+	MentionedUserID int64  `json:"mentioned_user_id,omitempty"`
+	Title           string `json:"title,omitempty"`
+	Status          string `json:"status,omitempty"`
+}
+
+type SendNotificationPayload struct {
+	EventID         string `json:"event_id"`
+	EventType       string `json:"event_type"`
+	PostID          int64  `json:"post_id"`
+	CommentID       int64  `json:"comment_id,omitempty"`
+	MentionedUserID int64  `json:"mentioned_user_id,omitempty"`
 }
 
 type GenerateAIReplyEnqueuer struct {
+	enqueuer Enqueuer
+}
+
+type JudgeAIFollowupEnqueuer struct {
 	enqueuer Enqueuer
 }
 
@@ -67,10 +102,20 @@ func NewGenerateAIReplyEnqueuer(enqueuer Enqueuer) *GenerateAIReplyEnqueuer {
 	return &GenerateAIReplyEnqueuer{enqueuer: enqueuer}
 }
 
-func (e *GenerateAIReplyEnqueuer) EnqueueGenerateAIReply(ctx context.Context, postID, agentID int64) error {
-	payload := GenerateAIReplyPayload{PostID: postID, AIAgentID: agentID}
+func NewJudgeAIFollowupEnqueuer(enqueuer Enqueuer) *JudgeAIFollowupEnqueuer {
+	return &JudgeAIFollowupEnqueuer{enqueuer: enqueuer}
+}
+
+func (e *GenerateAIReplyEnqueuer) EnqueueAutoGenerateAIReply(ctx context.Context, postID, agentID int64) error {
+	return e.EnqueueGenerateAIReply(ctx, GenerateAIReplyPayload{PostID: postID, AIAgentID: agentID, TriggerType: "AUTO"})
+}
+
+func (e *GenerateAIReplyEnqueuer) EnqueueGenerateAIReply(ctx context.Context, payload GenerateAIReplyPayload) error {
+	if payload.TriggerType == "" {
+		payload.TriggerType = "AUTO"
+	}
 	if enqueuer, ok := e.enqueuer.(optionEnqueuer); ok {
-		err := enqueuer.EnqueueWithOptions(ctx, GenerateAIReply, payload, asynq.TaskID(generateAIReplyTaskID(postID, agentID)))
+		err := enqueuer.EnqueueWithOptions(ctx, GenerateAIReply, payload, asynq.TaskID(generateAIReplyTaskID(payload)))
 		if errors.Is(err, asynq.ErrTaskIDConflict) {
 			return nil
 		}
@@ -79,8 +124,20 @@ func (e *GenerateAIReplyEnqueuer) EnqueueGenerateAIReply(ctx context.Context, po
 	return e.enqueuer.Enqueue(ctx, GenerateAIReply, payload)
 }
 
+func (e *JudgeAIFollowupEnqueuer) EnqueueJudgeAIFollowup(ctx context.Context, payload JudgeAIFollowupPayload) error {
+	if enqueuer, ok := e.enqueuer.(optionEnqueuer); ok {
+		err := enqueuer.EnqueueWithOptions(ctx, JudgeAIFollowup, payload, asynq.TaskID(judgeAIFollowupTaskID(payload)))
+		if errors.Is(err, asynq.ErrTaskIDConflict) {
+			return nil
+		}
+		return err
+	}
+	return e.enqueuer.Enqueue(ctx, JudgeAIFollowup, payload)
+}
+
 var cronContracts = map[string]CronContractInfo{
 	CleanupProcessedEvents: {HandlerOwner: "P5 task cleanup_processed_events"},
+	RefreshHotScore:        {HandlerOwner: "P10 hot score pipeline"},
 }
 
 // Types returns all §7.2 Asynq task type constants in stable order.
@@ -100,7 +157,7 @@ func Types() []string {
 
 // CronTypes returns all §9.3 periodic task types owned by this package.
 func CronTypes() []string {
-	return []string{CleanupProcessedEvents}
+	return []string{CleanupProcessedEvents, RefreshHotScore}
 }
 
 // CronContract returns owner metadata for a periodic task.
@@ -156,6 +213,43 @@ func RegisterHandlers(mux *asynq.ServeMux, db database.DBTX, handlers ...Handler
 			})
 		})
 	}
+	if h.GenerateAIReply != nil {
+		mux.HandleFunc(GenerateAIReply, func(ctx context.Context, task *asynq.Task) error {
+			return runDedupedTask(ctx, db, task, func() error {
+				var payload GenerateAIReplyPayload
+				if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+					return fmt.Errorf("decode generate_ai_reply payload: %w", err)
+				}
+				return h.GenerateAIReply(ctx, payload)
+			})
+		})
+	}
+	if h.JudgeAIFollowup != nil {
+		mux.HandleFunc(JudgeAIFollowup, func(ctx context.Context, task *asynq.Task) error {
+			return runDedupedTask(ctx, db, task, func() error {
+				var payload JudgeAIFollowupPayload
+				if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+					return fmt.Errorf("decode judge_ai_followup payload: %w", err)
+				}
+				return h.JudgeAIFollowup(ctx, payload)
+			})
+		})
+	}
+	if h.SyncSearchIndex != nil {
+		mux.HandleFunc(SyncSearchIndex, func(ctx context.Context, task *asynq.Task) error {
+			return h.SyncSearchIndex(ctx, task.Payload())
+		})
+	}
+	if h.SendNotification != nil {
+		mux.HandleFunc(SendNotification, func(ctx context.Context, task *asynq.Task) error {
+			return h.SendNotification(ctx, task.Payload())
+		})
+	}
+	if h.RefreshHotScore != nil {
+		mux.HandleFunc(RefreshHotScore, func(ctx context.Context, _ *asynq.Task) error {
+			return h.RefreshHotScore(ctx)
+		})
+	}
 }
 
 func runDedupedTask(ctx context.Context, db database.DBTX, task *asynq.Task, fn func() error) error {
@@ -182,8 +276,16 @@ func taskEventID(ctx context.Context, task *asynq.Task) string {
 	return "task:" + hex.EncodeToString(sum[:])
 }
 
-func generateAIReplyTaskID(postID, agentID int64) string {
-	return fmt.Sprintf("%s:%d:%d", GenerateAIReply, postID, agentID)
+func generateAIReplyTaskID(payload GenerateAIReplyPayload) string {
+	parentID := int64(0)
+	if payload.ParentCommentID != nil {
+		parentID = *payload.ParentCommentID
+	}
+	return fmt.Sprintf("%s:%d:%d:%d:%s", GenerateAIReply, payload.PostID, parentID, payload.AIAgentID, payload.TriggerType)
+}
+
+func judgeAIFollowupTaskID(payload JudgeAIFollowupPayload) string {
+	return fmt.Sprintf("%s:%d:%d:%d", JudgeAIFollowup, payload.PostID, payload.ParentCommentID, payload.ReplyCommentID)
 }
 
 // NewScheduler returns an Asynq scheduler connected to the shared Redis broker.
@@ -200,6 +302,14 @@ func RegisterCleanupCron(s *asynq.Scheduler) (string, error) {
 	id, err := s.Register("@daily", asynq.NewTask(CleanupProcessedEvents, payload))
 	if err != nil {
 		return "", fmt.Errorf("register cleanup processed events cron: %w", err)
+	}
+	return id, nil
+}
+
+func RegisterRefreshHotScoreCron(s *asynq.Scheduler) (string, error) {
+	id, err := s.Register("@every 30s", asynq.NewTask(RefreshHotScore, nil))
+	if err != nil {
+		return "", fmt.Errorf("register refresh hot score cron: %w", err)
 	}
 	return id, nil
 }

@@ -87,6 +87,59 @@ func TestRegisterHandlersIncludesCleanupAndP6TagPost(t *testing.T) {
 	}
 }
 
+func TestRegisterHandlersIncludesGenerateAIReply(t *testing.T) {
+	db := &taskDBTX{}
+	reply := &recordingGenerateAIReplyHandler{}
+	mux := asynq.NewServeMux()
+	RegisterHandlers(mux, db, Handlers{GenerateAIReply: reply.HandleGenerateAIReply})
+	parentID := int64(77)
+	payload, err := json.Marshal(GenerateAIReplyPayload{PostID: 42, ParentCommentID: &parentID, AIAgentID: 1001, TriggerType: "MENTION"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mux.ProcessTask(context.Background(), asynq.NewTask(GenerateAIReply, payload)); err != nil {
+		t.Fatal(err)
+	}
+
+	if reply.postID != 42 || reply.parentID == nil || *reply.parentID != 77 || reply.agentID != 1001 || reply.triggerType != "MENTION" {
+		t.Fatalf("reply task = post %d parent %v agent %d trigger %q, want 42/77/1001/MENTION", reply.postID, reply.parentID, reply.agentID, reply.triggerType)
+	}
+}
+
+func TestRegisterHandlersIncludesJudgeAIFollowup(t *testing.T) {
+	db := &taskDBTX{}
+	followup := &recordingJudgeAIFollowupHandler{}
+	mux := asynq.NewServeMux()
+	RegisterHandlers(mux, db, Handlers{JudgeAIFollowup: followup.HandleJudgeAIFollowup})
+	payload, err := json.Marshal(JudgeAIFollowupPayload{PostID: 42, ParentCommentID: 77, ReplyCommentID: 88})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mux.ProcessTask(context.Background(), asynq.NewTask(JudgeAIFollowup, payload)); err != nil {
+		t.Fatal(err)
+	}
+
+	if followup.postID != 42 || followup.parentID != 77 || followup.replyID != 88 {
+		t.Fatalf("followup task = post %d parent %d reply %d, want 42/77/88", followup.postID, followup.parentID, followup.replyID)
+	}
+}
+
+func TestRegisterHandlersIncludesRefreshHotScore(t *testing.T) {
+	db := &taskDBTX{}
+	hot := &recordingRefreshHotScoreHandler{}
+	mux := asynq.NewServeMux()
+	RegisterHandlers(mux, db, Handlers{RefreshHotScore: hot.HandleRefreshHotScore})
+
+	if err := mux.ProcessTask(context.Background(), asynq.NewTask(RefreshHotScore, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if hot.calls != 1 {
+		t.Fatalf("refresh calls = %d, want 1", hot.calls)
+	}
+}
+
 func TestRegisterHandlersDedupsAsynqTaskByTaskID(t *testing.T) {
 	db := &taskDBTX{}
 	tagging := &recordingTagPostHandler{}
@@ -113,16 +166,33 @@ func TestRegisterHandlersDedupsAsynqTaskByTaskID(t *testing.T) {
 func TestGenerateAIReplyEnqueuerUsesTaskContract(t *testing.T) {
 	enqueuer := &recordingEnqueuer{}
 	reply := NewGenerateAIReplyEnqueuer(enqueuer)
+	parentID := int64(77)
 
-	if err := reply.EnqueueGenerateAIReply(context.Background(), 42, 1001); err != nil {
+	if err := reply.EnqueueGenerateAIReply(context.Background(), GenerateAIReplyPayload{PostID: 42, ParentCommentID: &parentID, AIAgentID: 1001, TriggerType: "MENTION"}); err != nil {
 		t.Fatal(err)
 	}
 
-	if enqueuer.taskType != GenerateAIReply || enqueuer.postID != 42 || enqueuer.agentID != 1001 {
-		t.Fatalf("enqueued = %s post=%d agent=%d, want generate_ai_reply post=42 agent=1001", enqueuer.taskType, enqueuer.postID, enqueuer.agentID)
+	if enqueuer.taskType != GenerateAIReply || enqueuer.postID != 42 || enqueuer.parentID == nil || *enqueuer.parentID != 77 || enqueuer.agentID != 1001 || enqueuer.triggerType != "MENTION" {
+		t.Fatalf("enqueued = %s post=%d parent=%v agent=%d trigger=%q, want generate_ai_reply post=42 parent=77 agent=1001 trigger=MENTION", enqueuer.taskType, enqueuer.postID, enqueuer.parentID, enqueuer.agentID, enqueuer.triggerType)
 	}
-	if enqueuer.taskID != "generate_ai_reply:42:1001" {
-		t.Fatalf("task id = %q, want deterministic generate_ai_reply:42:1001", enqueuer.taskID)
+	if enqueuer.taskID != "generate_ai_reply:42:77:1001:MENTION" {
+		t.Fatalf("task id = %q, want deterministic generate_ai_reply:42:77:1001:MENTION", enqueuer.taskID)
+	}
+}
+
+func TestJudgeAIFollowupEnqueuerUsesTaskContract(t *testing.T) {
+	enqueuer := &recordingEnqueuer{}
+	followup := NewJudgeAIFollowupEnqueuer(enqueuer)
+
+	if err := followup.EnqueueJudgeAIFollowup(context.Background(), JudgeAIFollowupPayload{PostID: 42, ParentCommentID: 77, ReplyCommentID: 88}); err != nil {
+		t.Fatal(err)
+	}
+
+	if enqueuer.taskType != JudgeAIFollowup || enqueuer.postID != 42 || enqueuer.parentCommentID != 77 || enqueuer.replyCommentID != 88 {
+		t.Fatalf("enqueued = %s post=%d parent=%d reply=%d, want judge_ai_followup 42/77/88", enqueuer.taskType, enqueuer.postID, enqueuer.parentCommentID, enqueuer.replyCommentID)
+	}
+	if enqueuer.taskID != "judge_ai_followup:42:77:88" {
+		t.Fatalf("task id = %q, want deterministic judge_ai_followup:42:77:88", enqueuer.taskID)
 	}
 }
 
@@ -174,5 +244,42 @@ type recordingTagPostHandler struct {
 func (h *recordingTagPostHandler) HandleTagPost(_ context.Context, postID int64) error {
 	h.calls++
 	h.postID = postID
+	return nil
+}
+
+type recordingGenerateAIReplyHandler struct {
+	postID      int64
+	parentID    *int64
+	agentID     int64
+	triggerType string
+}
+
+func (h *recordingGenerateAIReplyHandler) HandleGenerateAIReply(_ context.Context, payload GenerateAIReplyPayload) error {
+	h.postID = payload.PostID
+	h.parentID = payload.ParentCommentID
+	h.agentID = payload.AIAgentID
+	h.triggerType = payload.TriggerType
+	return nil
+}
+
+type recordingJudgeAIFollowupHandler struct {
+	postID   int64
+	parentID int64
+	replyID  int64
+}
+
+func (h *recordingJudgeAIFollowupHandler) HandleJudgeAIFollowup(_ context.Context, payload JudgeAIFollowupPayload) error {
+	h.postID = payload.PostID
+	h.parentID = payload.ParentCommentID
+	h.replyID = payload.ReplyCommentID
+	return nil
+}
+
+type recordingRefreshHotScoreHandler struct {
+	calls int
+}
+
+func (h *recordingRefreshHotScoreHandler) HandleRefreshHotScore(context.Context) error {
+	h.calls++
 	return nil
 }

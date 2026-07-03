@@ -51,8 +51,8 @@ export default function LoginPage() {
 
     setSubmitting(true);
     try {
-      const { user } = await api.auth.login(identifier, password);
-      setCurrentUser(user);
+      const { user, token } = await api.auth.login(identifier, password);
+      setCurrentUser(user, token);
       navigate(redirect && redirect.startsWith("/") ? redirect : "/", { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "登录失败，请稍后重试";

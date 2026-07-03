@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Virtuoso } from "react-virtuoso";
 import { usePostDetail } from "../hooks/usePosts";
 import { useComments } from "../hooks/useComments";
 import { useDecisionLogsForPost } from "../hooks/useDecisionLogs";
+import { usePostActions } from "../hooks/usePostActions";
 import { useUserStore } from "../stores/useUserStore";
 import { ProcessingStep } from "../api/types";
 import { formatRelativeTime, formatCount } from "../utils/format";
@@ -12,6 +13,7 @@ import SafeMarkdown from "../components/ui/SafeMarkdown";
 import CommentEditor from "../components/comments/CommentEditor";
 import HumanComment from "../components/comments/HumanComment";
 import AIComment from "../components/comments/AIComment";
+import AlertBar from "../components/ui/AlertBar";
 import ParticipatingAI from "../components/sidebar/ParticipatingAI";
 import PostTags from "../components/sidebar/PostTags";
 import AIProcessingStatus from "../components/sidebar/AIProcessingStatus";
@@ -56,9 +58,11 @@ export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
   const postId = Number(id);
   const { currentUser } = useUserStore();
+  const [error, setError] = useState<string | null>(null);
 
   const { data: post, isLoading } = usePostDetail(postId);
   const { comments, isLoading: commentsLoading, createComment, isSubmitting } = useComments(postId);
+  const { likePost, favoritePost, isLiking, isFavoriting } = usePostActions(postId);
   const { data: decisionLogs = [] } = useDecisionLogsForPost(postId);
 
   const steps = useMemo(() => (post ? buildSteps(post.aiStatus) : []), [post]);
@@ -92,12 +96,17 @@ export default function PostDetailPage() {
   }
 
   const handleSubmit = async (content: string) => {
-    await createComment({
-      postId,
-      parentId: null,
-      content,
-      author: { username: currentUser!.username, avatar: currentUser!.avatar, isAi: false },
-    });
+    try {
+      setError(null);
+      await createComment({
+        postId,
+        parentId: null,
+        content,
+        author: { username: currentUser!.username, avatar: currentUser!.avatar, isAi: false },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "评论发布失败");
+    }
   };
 
   return (
@@ -110,7 +119,7 @@ export default function PostDetailPage() {
               <span className="rounded border border-cohere-hairline bg-cohere-surface-container px-1 py-0.5 font-label-mono text-micro text-cohere-on-surface">
                 {post.category}
               </span>
-              <span className="font-label-mono text-micro text-cohere-muted">
+              <span className="font-label-mono text-micro text-cohere-on-surface-variant">
                 {formatRelativeTime(post.createdAt)}发布
               </span>
             </div>
@@ -130,16 +139,34 @@ export default function PostDetailPage() {
                   <div className="font-label-mono-bold text-cohere-on-surface">
                     {post.author.username}
                   </div>
-                  <div className="font-micro text-cohere-muted">{post.author.role ?? "研究员"}</div>
+                  <div className="font-micro text-cohere-on-surface-variant">{post.author.role ?? "研究员"}</div>
                 </div>
               </div>
-              <div className="flex gap-md font-label-mono text-micro text-cohere-muted">
+              <div className="flex gap-md font-label-mono text-micro text-cohere-on-surface-variant">
                 <span className="flex items-center gap-1">
                   <MaterialIcon name="visibility" size={16} /> {formatCount(post.viewCount)}
                 </span>
                 <span className="flex items-center gap-1">
                   <MaterialIcon name="forum" size={16} /> {post.commentCount}
                 </span>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 transition-colors hover:text-cohere-ink disabled:opacity-60"
+                  disabled={isLiking}
+                  onClick={() => likePost().catch((err) => setError(err instanceof Error ? err.message : "点赞失败"))}
+                >
+                  <MaterialIcon name="thumb_up" size={16} /> 点赞
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 transition-colors hover:text-cohere-ink disabled:opacity-60"
+                  disabled={isFavoriting}
+                  onClick={() =>
+                    favoritePost().catch((err) => setError(err instanceof Error ? err.message : "收藏失败"))
+                  }
+                >
+                  <MaterialIcon name="bookmark" size={16} /> 收藏
+                </button>
               </div>
             </div>
 
@@ -150,12 +177,18 @@ export default function PostDetailPage() {
           <section className="mt-md">
             <h3 className="mb-lg font-headline-lg text-cohere-ink">讨论区</h3>
 
+            {error && (
+              <div className="mb-md">
+                <AlertBar tone="error" message={error} onClose={() => setError(null)} />
+              </div>
+            )}
+
             <CommentEditor onSubmit={handleSubmit} isSubmitting={isSubmitting} />
 
             {commentsLoading ? (
-              <p className="font-body-main text-cohere-muted">加载评论中…</p>
+              <p className="font-body-main text-cohere-on-surface-variant">加载评论中…</p>
             ) : comments.length === 0 ? (
-              <p className="font-body-main text-cohere-muted">
+              <p className="font-body-main text-cohere-on-surface-variant">
                 还没有评论。发布第一条评论，或 @某个 AI 角色让它参与。
               </p>
             ) : (

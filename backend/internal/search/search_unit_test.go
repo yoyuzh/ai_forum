@@ -5,6 +5,7 @@ package search
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -20,9 +21,17 @@ import (
 type stubRoundTripper struct {
 	statusCode int
 	body       string
+	requests   []*http.Request
+	bodies     []string
 }
 
-func (s stubRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+func (s *stubRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Body != nil {
+		var b strings.Builder
+		_, _ = io.Copy(&b, req.Body)
+		s.bodies = append(s.bodies, b.String())
+	}
+	s.requests = append(s.requests, req)
 	h := make(http.Header)
 	// The ES client validates the X-Elastic-Product header on 2xx responses
 	// (genuineCheckHeader). Without it the client rejects the response as
@@ -40,9 +49,10 @@ func (s stubRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
 // the given canned response for every HTTP request.
 func newStubbedClient(t *testing.T, statusCode int, body string) *es.Client {
 	t.Helper()
+	transport := &stubRoundTripper{statusCode: statusCode, body: body}
 	client, err := es.NewClient(es.Config{
 		Addresses: []string{"http://stub:9200"},
-		Transport: stubRoundTripper{statusCode: statusCode, body: body},
+		Transport: transport,
 	})
 	require.NoError(t, err)
 	return client
@@ -92,4 +102,40 @@ func TestIsIKMissingBody(t *testing.T) {
 	assert.True(t, isIKMissingBody(`{"unrelated":"error"}`, 400))
 	// Non-400 is treated as missing.
 	assert.True(t, isIKMissingBody(`{}`, 500))
+}
+
+func TestEnsureIndexUsesForumContentsIKMappingAndIsIdempotent(t *testing.T) {
+	transport := &stubRoundTripper{statusCode: 400, body: `{"error":{"type":"resource_already_exists_exception"}}`}
+	client, err := es.NewClient(es.Config{Addresses: []string{"http://stub:9200"}, Transport: transport})
+	require.NoError(t, err)
+	store := NewESIndexStore(client)
+
+	err = store.EnsureIndex(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, transport.requests, 1)
+	assert.Equal(t, http.MethodPut, transport.requests[0].Method)
+	assert.Contains(t, transport.requests[0].URL.Path, "forum_contents")
+	assert.Contains(t, transport.bodies[0], `"analyzer":"ik_smart"`)
+	assert.Contains(t, transport.bodies[0], `"type":{"type":"keyword"}`)
+}
+
+func TestESIndexStoreUpsertAndDeleteUseDocumentID(t *testing.T) {
+	transport := &stubRoundTripper{statusCode: 200, body: `{}`}
+	client, err := es.NewClient(es.Config{Addresses: []string{"http://stub:9200"}, Transport: transport})
+	require.NoError(t, err)
+	store := NewESIndexStore(client)
+	doc := Document{ID: "post:42", Type: "post", PostID: 42, Title: "t", Body: "b"}
+
+	require.NoError(t, store.Upsert(context.Background(), doc))
+	require.NoError(t, store.Delete(context.Background(), doc.ID))
+
+	require.Len(t, transport.requests, 2)
+	assert.Equal(t, http.MethodPut, transport.requests[0].Method)
+	assert.Contains(t, transport.requests[0].URL.Path, "post:42")
+	assert.Equal(t, http.MethodDelete, transport.requests[1].Method)
+	assert.Contains(t, transport.requests[1].URL.Path, "post:42")
+	var got Document
+	require.NoError(t, json.Unmarshal([]byte(transport.bodies[0]), &got))
+	assert.Equal(t, doc, got)
 }

@@ -2,6 +2,7 @@ package post
 
 import (
 	"context"
+	"database/sql"
 
 	"ai-forum/backend/internal/database"
 )
@@ -15,6 +16,10 @@ type Repository interface {
 	Update(ctx context.Context, tx DBTX, p Post) (Post, error)
 	SoftDelete(ctx context.Context, tx DBTX, postID int64) error
 	UpdateStatus(ctx context.Context, tx DBTX, postID int64, status string) error
+}
+
+type SnapshotDB interface {
+	GetContext(context.Context, interface{}, string, ...interface{}) error
 }
 
 type SQLRepository struct{}
@@ -77,4 +82,16 @@ func (r *SQLRepository) SoftDelete(ctx context.Context, tx DBTX, postID int64) e
 func (r *SQLRepository) UpdateStatus(ctx context.Context, tx DBTX, postID int64, status string) error {
 	_, err := tx.ExecContext(ctx, `UPDATE posts SET status = ? WHERE id = ? AND deleted_at IS NULL`, status, postID)
 	return err
+}
+
+func LoadPostSnapshot(ctx context.Context, db SnapshotDB, postID int64) (PostSnapshot, error) {
+	var p PostSnapshot
+	err := db.GetContext(ctx, &p, `
+		SELECT id, view_count, like_count, comment_count, ai_reply_count, created_at
+		FROM posts
+		WHERE id = ? AND deleted_at IS NULL`, postID)
+	if err == sql.ErrNoRows {
+		return PostSnapshot{}, err
+	}
+	return p, err
 }

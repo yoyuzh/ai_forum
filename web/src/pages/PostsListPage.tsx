@@ -88,7 +88,7 @@ export default function PostsListPage() {
             </div>
 
             {isLoading ? (
-              <p className="font-body-main text-cohere-muted">加载帖子中…</p>
+              <p className="font-body-main text-cohere-on-surface-variant">加载帖子中…</p>
             ) : posts.length === 0 ? (
               <div className="card-base p-lg">
                 <p className="font-body-main text-cohere-muted">
@@ -124,7 +124,7 @@ export default function PostsListPage() {
             </div>
             <form onSubmit={handleSubmit} className="flex flex-col gap-md">
               <div>
-                <label htmlFor="post-title" className="mb-1 block font-caption text-cohere-slate">
+                <label htmlFor="post-title" className="mb-1 block font-caption text-cohere-on-surface-variant">
                   标题
                 </label>
                 <input
@@ -141,7 +141,7 @@ export default function PostsListPage() {
               </div>
 
               <div>
-                <label htmlFor="post-category" className="mb-1 block font-caption text-cohere-slate">
+                <label htmlFor="post-category" className="mb-1 block font-caption text-cohere-on-surface-variant">
                   分类
                 </label>
                 <select
@@ -160,7 +160,7 @@ export default function PostsListPage() {
               </div>
 
               <div>
-                <label htmlFor="post-tags" className="mb-1 block font-caption text-cohere-slate">
+                <label htmlFor="post-tags" className="mb-1 block font-caption text-cohere-on-surface-variant">
                   标签（逗号分隔）
                 </label>
                 <input
@@ -176,7 +176,7 @@ export default function PostsListPage() {
               </div>
 
               <div>
-                <label htmlFor="post-content" className="mb-1 block font-caption text-cohere-slate">
+                <label htmlFor="post-content" className="mb-1 block font-caption text-cohere-on-surface-variant">
                   正文
                 </label>
                 <textarea

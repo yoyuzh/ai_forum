@@ -19,21 +19,30 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	"ai-forum/backend/internal/admin"
 	"ai-forum/backend/internal/ai/decision"
+	"ai-forum/backend/internal/ai/followup"
+	"ai-forum/backend/internal/ai/modelclient"
+	"ai-forum/backend/internal/ai/reply"
 	"ai-forum/backend/internal/ai/tagging"
 	"ai-forum/backend/internal/auth"
 	"ai-forum/backend/internal/cache"
 	"ai-forum/backend/internal/config"
 	"ai-forum/backend/internal/database"
 	comment "ai-forum/backend/internal/forum/comment"
+	favorite "ai-forum/backend/internal/forum/favorite"
+	like "ai-forum/backend/internal/forum/like"
 	post "ai-forum/backend/internal/forum/post"
 	"ai-forum/backend/internal/internalapi"
 	"ai-forum/backend/internal/logger"
+	"ai-forum/backend/internal/moderation"
 	"ai-forum/backend/internal/mq"
+	"ai-forum/backend/internal/notification"
 	"ai-forum/backend/internal/outbox"
 	"ai-forum/backend/internal/rbac"
 	"ai-forum/backend/internal/router"
 	"ai-forum/backend/internal/search"
+	"ai-forum/backend/internal/sse"
 	"ai-forum/backend/internal/task"
 	"ai-forum/backend/internal/user"
 )
@@ -119,7 +128,8 @@ func NewApp(cfg *config.Config) (*App, error) {
 
 // NewAPIServer wires the api-server HTTP process.
 func (a *App) NewAPIServer() Process {
-	internal := internalapi.NewHandler(a.Cfg.InternalAPI, internalapi.NoopHub{}, a.Log)
+	hub := sse.NewHub()
+	internal := internalapi.NewHandler(a.Cfg.InternalAPI, hub, a.Log)
 	userRepo := user.NewSQLRepository(a.DB)
 	userSvc := user.NewService(userRepo)
 	userHandler := user.NewHandler(userSvc)
@@ -128,22 +138,68 @@ func (a *App) NewAPIServer() Process {
 	runTx := func(ctx context.Context, fn func(database.DBTX) error) error {
 		return database.RunInTx(ctx, a.DB, func(tx *sqlx.Tx) error { return fn(tx) })
 	}
-	postSvc := post.NewService(post.NewSQLRepository(), outbox.Append)
+	var hot *post.RedisHotStore
+	if a.Redis != nil {
+		hot = post.NewRedisHotStore(a.Redis, func(ctx context.Context, postID int64) (post.PostSnapshot, error) {
+			return post.LoadPostSnapshot(ctx, a.DB, postID)
+		})
+	}
+	var postOpts []post.Option
+	var commentOpts []comment.Option
+	if hot != nil {
+		postOpts = append(postOpts, post.WithHotTracker(hot))
+		commentOpts = append(commentOpts, comment.WithHotTracker(hot))
+	}
+	postSvc := post.NewService(post.NewSQLRepository(), outbox.Append, postOpts...)
 	postHandler := post.NewHandler(postSvc, runTx)
-	commentSvc := comment.NewService(comment.NewSQLRepository(), outbox.Append)
+	var likeOpts []like.Option
+	if hot != nil {
+		likeOpts = append(likeOpts, like.WithHotTracker(hot))
+	}
+	likeSvc := like.NewService(like.NewSQLRepository(), outbox.Append, likeOpts...)
+	likeHandler := like.NewHandler(likeSvc, runTx)
+	favoriteSvc := favorite.NewService(favorite.NewSQLRepository(), outbox.Append)
+	favoriteHandler := favorite.NewHandler(favoriteSvc, runTx)
+	if a.Redis != nil {
+		commentOpts = append(commentOpts, comment.WithMentionLimiter(comment.NewRedisMentionLimiter(a.Redis, 5, time.Minute)))
+	} else {
+		commentOpts = append(commentOpts, comment.WithMentionLimiter(comment.NewMemoryMentionLimiter(5, time.Minute, time.Now)))
+	}
+	if a.AsynqClient != nil {
+		enqueuer := task.NewAsynqEnqueuer(a.AsynqClient)
+		commentOpts = append(commentOpts,
+			comment.WithGenerateEnqueuer(task.NewGenerateAIReplyEnqueuer(enqueuer)),
+			comment.WithFollowupEnqueuer(task.NewJudgeAIFollowupEnqueuer(enqueuer)),
+		)
+	}
+	commentSvc := comment.NewService(comment.NewSQLRepository(), outbox.Append, commentOpts...)
 	commentHandler := comment.NewHandler(commentSvc, runTx)
+	notificationHTTPHandler := notification.NewHTTPHandler(a.DB)
+	adminHandler := admin.NewHandler(admin.NewSQLStore(a.DB), mustAdminAuthorizer())
 	routes, err := businessRoutes(businessRouteDeps{
-		tokens:           tokens,
-		register:         http.HandlerFunc(userHandler.Register),
-		login:            http.HandlerFunc(authHandler.Login),
-		profile:          http.HandlerFunc(userHandler.Profile),
-		listPosts:        http.HandlerFunc(postHandler.List),
-		getPost:          http.HandlerFunc(postHandler.Get),
-		createPost:       http.HandlerFunc(postHandler.Create),
-		updatePost:       http.HandlerFunc(postHandler.UpdateOwn),
-		deletePost:       http.HandlerFunc(postHandler.Delete),
-		createComment:    http.HandlerFunc(commentHandler.Create),
-		updatePostStatus: http.HandlerFunc(postHandler.UpdateStatus),
+		tokens:                   tokens,
+		register:                 http.HandlerFunc(userHandler.Register),
+		login:                    http.HandlerFunc(authHandler.Login),
+		profile:                  http.HandlerFunc(userHandler.Profile),
+		listPosts:                http.HandlerFunc(postHandler.List),
+		getPost:                  http.HandlerFunc(postHandler.Get),
+		createPost:               http.HandlerFunc(postHandler.Create),
+		updatePost:               http.HandlerFunc(postHandler.UpdateOwn),
+		deletePost:               http.HandlerFunc(postHandler.Delete),
+		listComments:             http.HandlerFunc(commentHandler.List),
+		createComment:            http.HandlerFunc(commentHandler.Create),
+		likePost:                 http.HandlerFunc(likeHandler.Like),
+		unlikePost:               http.HandlerFunc(likeHandler.Unlike),
+		favoritePost:             http.HandlerFunc(favoriteHandler.Favorite),
+		unfavoritePost:           http.HandlerFunc(favoriteHandler.Unfavorite),
+		listNotifications:        http.HandlerFunc(notificationHTTPHandler.List),
+		unreadNotifications:      http.HandlerFunc(notificationHTTPHandler.UnreadCount),
+		markNotificationRead:     http.HandlerFunc(notificationHTTPHandler.MarkRead),
+		markAllNotificationsRead: http.HandlerFunc(notificationHTTPHandler.MarkAllRead),
+		postEvents:               sse.NewEventsHandler(hub),
+		aiStatus:                 sse.NewStatusHandler(sse.NewSQLStatusStore(a.DB)),
+		updatePostStatus:         http.HandlerFunc(postHandler.UpdateStatus),
+		admin:                    adminHandler,
 	})
 	if err != nil {
 		return NewErrorProcess(err)
@@ -157,17 +213,29 @@ func (a *App) NewAPIServer() Process {
 }
 
 type businessRouteDeps struct {
-	tokens           *auth.TokenManager
-	register         http.Handler
-	login            http.Handler
-	profile          http.Handler
-	listPosts        http.Handler
-	getPost          http.Handler
-	createPost       http.Handler
-	updatePost       http.Handler
-	deletePost       http.Handler
-	createComment    http.Handler
-	updatePostStatus http.Handler
+	tokens                   *auth.TokenManager
+	register                 http.Handler
+	login                    http.Handler
+	profile                  http.Handler
+	listPosts                http.Handler
+	getPost                  http.Handler
+	createPost               http.Handler
+	updatePost               http.Handler
+	deletePost               http.Handler
+	listComments             http.Handler
+	createComment            http.Handler
+	likePost                 http.Handler
+	unlikePost               http.Handler
+	favoritePost             http.Handler
+	unfavoritePost           http.Handler
+	listNotifications        http.Handler
+	unreadNotifications      http.Handler
+	markNotificationRead     http.Handler
+	markAllNotificationsRead http.Handler
+	postEvents               http.Handler
+	aiStatus                 http.Handler
+	updatePostStatus         http.Handler
+	admin                    *admin.Handler
 }
 
 func businessRoutes(deps businessRouteDeps) (router.BusinessRoutes, error) {
@@ -178,24 +246,63 @@ func businessRoutes(deps businessRouteDeps) (router.BusinessRoutes, error) {
 	if err := authz.SeedAdminPolicies(); err != nil {
 		return router.BusinessRoutes{}, err
 	}
-	return router.BusinessRoutes{
-		Register:              deps.register,
-		Login:                 deps.login,
-		Profile:               deps.tokens.Middleware(deps.profile),
-		ListPosts:             deps.listPosts,
-		GetPost:               deps.getPost,
-		CreatePost:            deps.tokens.Middleware(deps.createPost),
-		UpdatePost:            deps.tokens.Middleware(deps.updatePost),
-		DeletePost:            deps.tokens.Middleware(authz.RequireSubject("post", "delete-any", deps.deletePost)),
-		CreateComment:         deps.tokens.Middleware(deps.createComment),
-		AdminUpdatePostStatus: deps.tokens.Middleware(authz.RequireSubject("post", "delete-any", deps.updatePostStatus)),
-	}, nil
+	routes := router.BusinessRoutes{
+		Register:                 deps.register,
+		Login:                    deps.login,
+		Profile:                  deps.tokens.Middleware(deps.profile),
+		ListPosts:                deps.listPosts,
+		GetPost:                  deps.getPost,
+		CreatePost:               deps.tokens.Middleware(deps.createPost),
+		UpdatePost:               deps.tokens.Middleware(deps.updatePost),
+		DeletePost:               deps.tokens.Middleware(authz.RequireSubject("post", "delete-any", deps.deletePost)),
+		ListComments:             deps.listComments,
+		CreateComment:            deps.tokens.Middleware(deps.createComment),
+		LikePost:                 deps.tokens.Middleware(deps.likePost),
+		UnlikePost:               deps.tokens.Middleware(deps.unlikePost),
+		FavoritePost:             deps.tokens.Middleware(deps.favoritePost),
+		UnfavoritePost:           deps.tokens.Middleware(deps.unfavoritePost),
+		ListNotifications:        deps.tokens.Middleware(deps.listNotifications),
+		UnreadNotifications:      deps.tokens.Middleware(deps.unreadNotifications),
+		MarkNotificationRead:     deps.tokens.Middleware(deps.markNotificationRead),
+		MarkAllNotificationsRead: deps.tokens.Middleware(deps.markAllNotificationsRead),
+		PostEvents:               deps.postEvents,
+		AIStatus:                 deps.aiStatus,
+		AdminUpdatePostStatus:    deps.tokens.Middleware(authz.RequireSubject("post", "delete-any", deps.updatePostStatus)),
+	}
+	if deps.admin != nil {
+		routes.AdminPermissions = deps.tokens.Middleware(http.HandlerFunc(deps.admin.Permissions))
+		routes.AdminListUsers = deps.tokens.Middleware(http.HandlerFunc(deps.admin.ListUsers))
+		routes.AdminListPosts = deps.tokens.Middleware(http.HandlerFunc(deps.admin.ListPosts))
+		routes.AdminListComments = deps.tokens.Middleware(http.HandlerFunc(deps.admin.ListComments))
+		routes.AdminListAgents = deps.tokens.Middleware(http.HandlerFunc(deps.admin.ListAgents))
+		routes.AdminUpdateAgent = deps.tokens.Middleware(http.HandlerFunc(deps.admin.UpdateAgent))
+		routes.AdminListTasks = deps.tokens.Middleware(http.HandlerFunc(deps.admin.ListTasks))
+		routes.AdminRetryTask = deps.tokens.Middleware(http.HandlerFunc(deps.admin.RetryTask))
+		routes.AdminTerminateTask = deps.tokens.Middleware(http.HandlerFunc(deps.admin.TerminateTask))
+		routes.AdminMarkTaskProcessed = deps.tokens.Middleware(http.HandlerFunc(deps.admin.MarkTaskProcessed))
+		routes.AdminListDecisionLogs = deps.tokens.Middleware(http.HandlerFunc(deps.admin.ListDecisionLogs))
+		routes.AdminListTags = deps.tokens.Middleware(http.HandlerFunc(deps.admin.ListTags))
+		routes.AdminListPreferences = deps.tokens.Middleware(http.HandlerFunc(deps.admin.ListPreferences))
+	}
+	return routes, nil
+}
+
+func mustAdminAuthorizer() *rbac.Authorizer {
+	authz, err := rbac.NewAuthorizer(rbac.DefaultModelPath())
+	if err != nil {
+		panic(err)
+	}
+	if err := authz.SeedAdminPolicies(); err != nil {
+		panic(err)
+	}
+	return authz
 }
 
 // NewWorker wires the worker-service lifecycle harness and P6 task handlers.
 func (a *App) NewWorker() Process {
 	mux := asynq.NewServeMux()
 	var consumers []workerRabbitConsumerSpec
+	var ensureIndex func(context.Context) error
 	if a.DB != nil {
 		handlers := task.Handlers{
 			TagPost: tagging.NewSQLHandler(a.DB, tagging.RuleTagger{}).HandleTagPost,
@@ -205,9 +312,75 @@ func (a *App) NewWorker() Process {
 			handlers.DecideAIReply = decision.NewSQLHandler(a.DB, task.NewGenerateAIReplyEnqueuer(enqueuer)).HandleDecideAIReply
 			consumers = workerRabbitConsumerSpecs(enqueuer, task.NewSQLProcessedStore(a.DB))
 		}
+		replyHandler := a.newReplyHandler()
+		handlers.GenerateAIReply = func(ctx context.Context, payload task.GenerateAIReplyPayload) error {
+			return replyHandler.HandleGenerateAIReply(ctx, reply.Task{PostID: payload.PostID, ParentCommentID: payload.ParentCommentID, AgentID: payload.AIAgentID, TriggerType: payload.TriggerType})
+		}
+		if a.AsynqClient != nil {
+			followupHandler := a.newFollowupHandler()
+			handlers.JudgeAIFollowup = followupHandler.HandleJudgeAIFollowup
+		}
+		if a.ES != nil {
+			store := search.NewESIndexStore(a.ES)
+			ensureIndex = store.EnsureIndex
+			handlers.SyncSearchIndex = search.NewSyncHandler(a.DB, store).HandleSyncSearchIndex
+		}
+		handlers.SendNotification = notification.NewHandler(a.DB).HandleSendNotification
+		if a.Redis != nil {
+			hot := post.NewRedisHotStore(a.Redis, func(ctx context.Context, postID int64) (post.PostSnapshot, error) {
+				return post.LoadPostSnapshot(ctx, a.DB, postID)
+			})
+			replyHandler.SetHotTracker(hot)
+			handlers.RefreshHotScore = func(ctx context.Context) error {
+				batchSize := 200
+				if a.Cfg != nil && a.Cfg.HotScore.BatchSize > 0 {
+					batchSize = a.Cfg.HotScore.BatchSize
+				}
+				_, err := hot.RefreshHotScores(ctx, a.DB, batchSize)
+				return err
+			}
+		}
 		task.RegisterHandlers(mux, a.DB, handlers)
 	}
-	return &WorkerProcess{name: "worker-service", log: a.Log, server: a.AsynqServer, scheduler: a.Scheduler, mux: mux, rabbit: a.RabbitMQ, consumers: consumers}
+	return &WorkerProcess{name: "worker-service", log: a.Log, server: a.AsynqServer, scheduler: a.Scheduler, mux: mux, rabbit: a.RabbitMQ, consumers: consumers, ensureIndex: ensureIndex}
+}
+
+func (a *App) newReplyHandler() *reply.Handler {
+	aiCfg := config.AIConfig{Model: "gpt-4o-mini", RequestPerSecond: 1, Burst: 1}
+	if a.Cfg != nil {
+		aiCfg = a.Cfg.AI
+	}
+	client := modelclient.NewObservedClient(
+		modelclient.NewOpenAICompatibleClient("https://api.openai.com", aiCfg.APIKey, aiCfg.Model, nil),
+		a.Log,
+		aiCfg.Model,
+	)
+	var limiter reply.Limiter = modelclient.NewTokenBucketLimiter(aiCfg.RequestPerSecond, aiCfg.Burst, time.Now)
+	if a.Redis != nil {
+		limiter = modelclient.NewRedisTokenBucketLimiter(a.Redis, "ai:reply:model", aiCfg.RequestPerSecond, aiCfg.Burst, time.Now)
+	}
+	handler := reply.NewSQLHandler(a.DB, client, moderation.NewRuleModerator(nil), limiter)
+	if a.Cfg != nil {
+		handler.SetNotifier(internalapi.NewClient(fmt.Sprintf("http://127.0.0.1:%d", a.Cfg.Server.Port), a.Cfg.InternalAPI.Token, nil))
+	}
+	return handler
+}
+
+func (a *App) newFollowupHandler() *followup.Handler {
+	aiCfg := config.AIConfig{Model: "gpt-4o-mini"}
+	if a.Cfg != nil {
+		aiCfg = a.Cfg.AI
+	}
+	client := modelclient.NewObservedClient(
+		modelclient.NewOpenAICompatibleClient("https://api.openai.com", aiCfg.APIKey, aiCfg.Model, nil),
+		a.Log,
+		aiCfg.Model,
+	)
+	return followup.NewHandler(
+		followup.NewSQLRepository(a.DB),
+		followup.NewModelClient(client),
+		task.NewGenerateAIReplyEnqueuer(task.NewAsynqEnqueuer(a.AsynqClient)),
+	)
 }
 
 // NewOutboxPublisher wires the outbox-publisher scan loop.
@@ -321,6 +494,7 @@ type WorkerProcess struct {
 	mux           *asynq.ServeMux
 	rabbit        *mq.Connection
 	consumers     []workerRabbitConsumerSpec
+	ensureIndex   func(context.Context) error
 	consumeCancel context.CancelFunc
 	consumeDone   chan error
 }
@@ -355,6 +529,22 @@ func workerRabbitConsumerSpecs(enqueuer task.Enqueuer, processed task.ProcessedS
 			handle: task.NewPostTaggedConsumer(
 				enqueuer,
 				task.WithProcessedStore(processed, "worker.decide_ai_reply"),
+			).Handle,
+		},
+		{
+			queue:        mq.QueueSearchIndex,
+			consumerName: "worker.sync_search_index",
+			handle: task.NewSearchIndexConsumer(
+				enqueuer,
+				task.WithProcessedStore(processed, "worker.sync_search_index"),
+			).Handle,
+		},
+		{
+			queue:        mq.QueueNotification,
+			consumerName: "worker.send_notification",
+			handle: task.NewNotificationConsumer(
+				enqueuer,
+				task.WithProcessedStore(processed, "worker.send_notification"),
 			).Handle,
 		},
 	}
@@ -399,9 +589,14 @@ func (p *ErrorProcess) Stop(context.Context) error {
 	return nil
 }
 
-func (p *WorkerProcess) Start(context.Context) error {
+func (p *WorkerProcess) Start(ctx context.Context) error {
 	if p.log != nil {
 		p.log.Info("process starting", zap.String("process", p.name))
+	}
+	if p.ensureIndex != nil {
+		if err := p.ensureIndex(ctx); err != nil {
+			return err
+		}
 	}
 	if p.rabbit != nil && len(p.consumers) > 0 {
 		if err := mq.DeclareTopology(p.rabbit); err != nil {
@@ -418,6 +613,9 @@ func (p *WorkerProcess) Start(context.Context) error {
 	}
 	if p.scheduler != nil {
 		if _, err := task.RegisterCleanupCron(p.scheduler); err != nil {
+			return err
+		}
+		if _, err := task.RegisterRefreshHotScoreCron(p.scheduler); err != nil {
 			return err
 		}
 		if err := p.scheduler.Start(); err != nil {

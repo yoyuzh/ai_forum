@@ -77,13 +77,13 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
-      const { user } = await api.auth.register({
+      const { user, token } = await api.auth.register({
         username: form.username,
         nickname: form.nickname,
         email: form.email,
         password: form.password,
       });
-      setCurrentUser(user);
+      setCurrentUser(user, token);
       navigate(redirect && redirect.startsWith("/") ? redirect : "/profile", { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "注册失败，请稍后重试";

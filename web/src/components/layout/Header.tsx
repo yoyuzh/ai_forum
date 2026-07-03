@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useUserStore } from "../../stores/useUserStore";
 import { useConnectionStore } from "../../stores/useConnectionStore";
+import { useNotifications } from "../../hooks/useNotifications";
 import MaterialIcon from "../ui/MaterialIcon";
 
 const NAV_LINKS = [
@@ -13,8 +14,10 @@ const NAV_LINKS = [
 export default function Header() {
   const currentUser = useUserStore((s) => s.currentUser);
   const { sseStatus } = useConnectionStore();
+  const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
 
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +31,7 @@ export default function Header() {
         <div className="flex items-center gap-lg">
           <NavLink to="/" className="flex items-baseline gap-xs" aria-label="AI Forum 首页">
             <span className="font-headline-lg font-black text-cohere-primary">AI Forum</span>
-            <span className="hidden font-micro text-cohere-muted sm:inline">Research Lab</span>
+            <span className="hidden font-micro text-cohere-on-surface-variant sm:inline">Research Lab</span>
           </NavLink>
 
           <form onSubmit={onSearch} className="relative hidden items-center md:flex">
@@ -69,7 +72,7 @@ export default function Header() {
         <div className="flex items-center gap-md">
           {/* SSE live status — discreet dot, matches the "AI 分析中" language. */}
           <span
-            className="hidden items-center gap-1 font-micro text-cohere-muted sm:flex"
+            className="hidden items-center gap-1 font-micro text-cohere-on-surface-variant sm:flex"
             title={`SSE 连接状态：${sseStatus}`}
           >
             <span
@@ -84,13 +87,56 @@ export default function Header() {
             {sseStatus === "connected" ? "实时在线" : sseStatus}
           </span>
 
-          <button
-            type="button"
-            className="flex items-center justify-center rounded-full p-sm text-cohere-on-surface-variant hover:bg-cohere-surface-variant hover:text-cohere-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue"
-            aria-label="通知"
-          >
-            <MaterialIcon name="notifications" />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpen((value) => !value)}
+              className="relative flex items-center justify-center rounded-full p-sm text-cohere-on-surface-variant hover:bg-cohere-surface-variant hover:text-cohere-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue"
+              aria-label={`通知 ${unreadCount}`}
+            >
+              <MaterialIcon name="notifications" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-cohere-error px-1 text-center font-micro text-[11px] text-white">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            {open && (
+              <div className="absolute right-0 top-12 z-50 w-72 rounded-sm border border-cohere-hairline bg-cohere-surface-lowest p-sm shadow-sm">
+                <div className="mb-sm flex items-center justify-between">
+                  <span className="font-label-mono-bold text-cohere-primary">通知</span>
+                  <button
+                    type="button"
+                    onClick={() => markAllRead()}
+                    className="font-micro text-cohere-on-surface-variant hover:text-cohere-primary"
+                  >
+                    全部已读
+                  </button>
+                </div>
+                <div className="flex max-h-80 flex-col overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <p className="p-sm font-caption text-cohere-on-surface-variant">暂无通知</p>
+                  ) : (
+                    notifications.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => markRead(item.id)}
+                        className="rounded-sm p-sm text-left transition-colors hover:bg-cohere-surface-low"
+                      >
+                        <div className="font-caption text-cohere-primary">{item.title}</div>
+                        {item.body && (
+                          <div className="mt-xxs line-clamp-2 font-micro text-cohere-on-surface-variant">
+                            {item.body}
+                          </div>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           <NavLink
             to="/profile"

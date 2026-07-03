@@ -28,6 +28,12 @@ After a Redis flush, the system SHALL rebuild `hot_posts:zset` from MySQL (recen
 - **WHEN** Redis is flushed and the rebuild runs
 - **THEN** `hot_posts:zset` is repopulated from MySQL snapshot data
 
+#### Scenario: Empty Redis repopulates on interaction
+- **WHEN** Redis has no hot counters, no `hot_posts:zset`, and no `dirty_hot_posts:set`
+- **AND** a user likes, comments, views, or an AI replies to a post
+- **THEN** the post's Redis counters, `dirty_hot_posts:set`, and `hot_posts:zset` are recreated
+- **AND** the next `refresh_hot_score` cron can snapshot the post to MySQL
+
 ### Requirement: Concurrent-load latency verification
 Under N parallel likes on a single post, the per-request p99 latency SHALL remain below the configured target, and zero MySQL `hot_score` writes SHALL occur on the hot path.
 

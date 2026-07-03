@@ -5,6 +5,8 @@ import type { ColumnsType } from "antd/es/table";
 import { adminApi } from "../api/client";
 import { AdminDecisionLog } from "../api/types";
 import MaterialIcon from "../components/MaterialIcon";
+import DecisionDetailDrawer from "../components/decision/DecisionDetailDrawer";
+import AgentDecisionBreakdown from "../components/decision/AgentDecisionBreakdown";
 
 export default function AIDecisionLogsPage() {
   const { data: logs = [] } = useQuery({
@@ -16,12 +18,13 @@ export default function AIDecisionLogsPage() {
     queryFn: adminApi.decisionContext,
   });
 
-  const [postId, setPostId] = useState("POST-8492");
+  const [postId, setPostId] = useState("");
   const [agent, setAgent] = useState("ALL");
   const [decision, setDecision] = useState("ALL");
+  const [detail, setDetail] = useState<AdminDecisionLog | null>(null);
   const filteredLogs = logs.filter((log) => {
     const normalizedPostId = postId.trim().toLowerCase();
-    if (normalizedPostId && !log.postId.toLowerCase().includes(normalizedPostId)) return false;
+    if (normalizedPostId && !String(log.postId).toLowerCase().includes(normalizedPostId)) return false;
     if (agent !== "ALL" && log.aiAgentName !== agent) return false;
     if (decision !== "ALL" && log.decision !== decision) return false;
     return true;
@@ -39,7 +42,7 @@ export default function AIDecisionLogsPage() {
       dataIndex: "traits",
       width: 160,
       render: (traits: string[]) => (
-        <span className="font-caption text-cohere-on-surface-variant">{traits.join(", ")}</span>
+        <span className="font-caption text-cohere-on-surface-variant">{(traits ?? []).join(", ")}</span>
       ),
     },
     {
@@ -47,7 +50,7 @@ export default function AIDecisionLogsPage() {
       dataIndex: "hitTags",
       width: 200,
       render: (tags: string[]) =>
-        tags.length > 0 ? (
+        (tags ?? []).length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {tags.map((t) => (
               <span key={t} className="mb-1 rounded bg-cohere-surface-variant px-1 py-0.5 font-label-mono text-[11px]">
@@ -65,8 +68,8 @@ export default function AIDecisionLogsPage() {
       width: 80,
       align: "right",
       render: (v: number, record: AdminDecisionLog) => (
-        <span className={`font-label-mono font-bold ${record.decision === "REPLY" ? "text-cohere-primary" : "text-cohere-muted"}`}>
-          {v}
+        <span className={`font-label-mono font-bold ${v >= record.thresholdValue ? "text-cohere-action-blue" : "text-cohere-coral"}`}>
+          {(v <= 1 ? v : v / 100).toFixed(2)}
         </span>
       ),
     },
@@ -75,7 +78,7 @@ export default function AIDecisionLogsPage() {
       dataIndex: "thresholdValue",
       width: 80,
       align: "right",
-      render: (v: number) => <span className="font-label-mono text-cohere-muted">{v}</span>,
+      render: (v: number) => <span className="font-label-mono text-cohere-muted">{(v <= 1 ? v : v / 100).toFixed(2)}</span>,
     },
     {
       title: "Decision",
@@ -86,11 +89,23 @@ export default function AIDecisionLogsPage() {
           <span className="inline-flex items-center gap-1 rounded-full border border-cohere-secondary/20 bg-cohere-success px-1 py-0.5 font-label-mono-bold text-[11px] text-cohere-secondary">
             <span className="status-dot bg-cohere-secondary" /> 参与回复
           </span>
+        ) : record.decision === "FALLBACK" ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-cohere-coral bg-cohere-coral-soft px-1 py-0.5 font-label-mono-bold text-[11px] text-cohere-primary">
+            <span className="status-dot bg-cohere-coral" /> fallback
+          </span>
         ) : (
           <span className="inline-flex items-center gap-1 rounded-full border border-cohere-hairline bg-cohere-surface-variant px-1 py-0.5 font-label-mono-bold text-[11px] text-cohere-muted">
             <span className="status-dot bg-cohere-muted" /> 跳过
           </span>
         ),
+    },
+    {
+      title: "Detail",
+      key: "detail",
+      width: 96,
+      render: (_: unknown, record: AdminDecisionLog) => (
+        <Button size="small" aria-label={`decision detail ${record.id}`} onClick={() => setDetail(record)}>详情</Button>
+      ),
     },
     {
       title: "Reasoning Log",
@@ -111,6 +126,8 @@ export default function AIDecisionLogsPage() {
           监控和分析 AI 代理在论坛帖子中的响应决策意图与阈值表现。
         </p>
       </div>
+
+      <AgentDecisionBreakdown logs={filteredLogs} />
 
       {/* Filter bar */}
       <div className="mb-lg flex flex-col gap-sm rounded-lg border border-cohere-hairline bg-cohere-surface-lowest p-sm md:flex-row md:items-end">
@@ -205,19 +222,19 @@ export default function AIDecisionLogsPage() {
                 <div key={log.id}>
                   <div className="mb-1 flex justify-between font-label-mono">
                     <span className="text-white">{log.aiAgentName}</span>
-                    <span className={passed ? "text-[#9dd1c4]" : "text-white/40"}>
+                    <span className={passed ? "text-[#9dd1c4]" : "text-white/70"}>
                       {log.willingnessScore} / {log.thresholdValue}
                     </span>
                   </div>
                   <div className="relative h-2 w-full overflow-hidden rounded-full bg-white/10">
                     <div
                       className={`h-full rounded-full ${passed ? "bg-[#9dd1c4]" : "bg-white/30"}`}
-                      style={{ width: `${log.willingnessScore}%` }}
+                      style={{ width: `${(log.willingnessScore <= 1 ? log.willingnessScore * 100 : log.willingnessScore)}%` }}
                     />
                     {/* Coral threshold marker */}
                     <div
                       className="absolute top-0 bottom-0 z-10 w-0.5 bg-cohere-coral"
-                      style={{ left: `${log.thresholdValue}%` }}
+                      style={{ left: `${(log.thresholdValue <= 1 ? log.thresholdValue * 100 : log.thresholdValue)}%` }}
                     />
                   </div>
                 </div>
@@ -261,6 +278,7 @@ export default function AIDecisionLogsPage() {
           size="middle"
         />
       </div>
+      <DecisionDetailDrawer log={detail} onClose={() => setDetail(null)} />
     </div>
   );
 }

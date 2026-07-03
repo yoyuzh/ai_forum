@@ -6,6 +6,7 @@ Web has a real mock layer (`src/api/{db,client,types}.ts`) and a client-side SSE
 
 **Goals:**
 - Env-gated mock/real client preserving signatures; real client hits P4 REST + P7 SSE/ai-status.
+- User-facing notifications entry: list, unread count, mark-read, mark-all-read.
 - Real EventSource with reconnect reconciliation + polling fallback.
 - 401/403/429 handling; auth wiring to Zustand (client state only).
 - Front-load axe-core + DOMPurify injection E2E.
@@ -30,6 +31,9 @@ Web has a real mock layer (`src/api/{db,client,types}.ts`) and a client-side SSE
 ### D4: Server state in TanStack Query, client state in Zustand
 Auth token + UI flags in Zustand; all server data via TanStack Query. No server data copied into Zustand (CLAUDE.md constraint).
 
+### D4a: Notifications are pulled, not pushed
+P9 writes notification rows; P11 exposes them in the web app through the real API client: list, unread count, mark one read, and mark all read. No notification SSE/WebSocket is added in v1; badge refresh uses TanStack Query invalidation after mark-read and normal polling/refetch.
+
 ### D5: Front-load a11y + injection
 axe-core scan in Playwright on feed + post detail now (not P13). DOMPurify-presence test + an injection E2E asserting sanitized output. This is critique risk #5 mitigation.
 
@@ -42,6 +46,7 @@ Update CLAUDE.md common-commands: web dev server is 5173 (e2e baseURL is source 
 - **[Risk] Simulator side-effect relied on outside src/sse** → Mitigation: D1 audit; route all through `api.*`.
 - **[Risk] Reconnect duplicates AI replies** → Mitigation: D2 idempotent prepend by id + ai-status reconcile.
 - **[Risk] Mock/real divergence** → Mitigation: D1 shared `types.ts`; P13 sanity runs real mode only.
+- **[Risk] Notifications exist only as DB rows** → Mitigation: D4a adds a pulled web entry without expanding realtime scope.
 - **[Risk] Frontend RBAC treated as security** → Mitigation: backend authoritative (P4); web only hides UI.
 
 ## Migration Plan

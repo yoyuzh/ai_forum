@@ -8,11 +8,12 @@ import StatusBadge from "./StatusBadge";
 interface TaskDetailDrawerProps {
   taskId: string | null;
   onClose: () => void;
+  canRetry?: boolean;
 }
 
 /** Slide-in drawer showing a task's metadata, error log, I/O payload, and
  *  execution timeline. Includes a retry affordance gated on backend RBAC. */
-export default function TaskDetailDrawer({ taskId, onClose }: TaskDetailDrawerProps) {
+export default function TaskDetailDrawer({ taskId, onClose, canRetry = true }: TaskDetailDrawerProps) {
   const queryClient = useQueryClient();
   const { message } = AntdApp.useApp();
 
@@ -41,7 +42,7 @@ export default function TaskDetailDrawer({ taskId, onClose }: TaskDetailDrawerPr
     {
       label: "执行时长",
       value:
-        task.durationMs !== null
+        task.durationMs !== null && task.durationMs !== undefined
           ? `${(task.durationMs / 1000).toFixed(1)}s${task.status === "FAILED" ? " (Timeout)" : ""}`
           : "—",
       sub: `重试次数: ${task.retryCount}/${task.maxRetries}`,
@@ -58,9 +59,11 @@ export default function TaskDetailDrawer({ taskId, onClose }: TaskDetailDrawerPr
       }
       extra={
         <div className="flex items-center gap-1">
-          <Button onClick={() => retryMutation.mutate()} loading={retryMutation.isPending}>
-            Retry Task
-          </Button>
+          {canRetry && (
+            <Button onClick={() => retryMutation.mutate()} loading={retryMutation.isPending}>
+              Retry Task
+            </Button>
+          )}
         </div>
       }
       placement="right"
@@ -136,7 +139,7 @@ export default function TaskDetailDrawer({ taskId, onClose }: TaskDetailDrawerPr
         Execution Timeline
       </h3>
       <div className="relative ml-sm mt-sm space-y-lg border-l border-dotted border-cohere-hairline pl-md">
-        {task.timeline.map((step, idx) => (
+        {(task.timeline ?? []).map((step, idx) => (
           <div key={idx} className="relative">
             <span
               className={`absolute -left-[25px] top-1 h-4 w-4 rounded-full border-2 ${

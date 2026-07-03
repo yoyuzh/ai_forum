@@ -11,11 +11,11 @@ interface AIProcessingStatusProps {
 
 const STEP_STYLE: Record<ProcessingStep["state"], string> = {
   done:
-    "border-cohere-hairline bg-cohere-surface-highest text-cohere-muted",
+    "border-cohere-hairline bg-cohere-surface-highest text-cohere-on-surface-variant",
   active:
     "border-cohere-action-blue bg-cohere-action-blue text-white",
   pending:
-    "border-cohere-hairline bg-cohere-surface text-cohere-muted",
+    "border-cohere-hairline bg-cohere-surface text-cohere-on-surface-variant",
 };
 
 /** 4-step AI pipeline stepper — analyzes tags → scores willingness → generates
@@ -54,7 +54,7 @@ export default function AIProcessingStatus({
         {steps.map((step) => (
           <div
             key={step.key}
-            className={`flex items-center gap-md transition-all duration-300 ease-cohere ${step.state === "pending" ? "opacity-50" : ""}`}
+            className="flex items-center gap-md transition-all duration-300 ease-cohere"
           >
             <div
               className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border transition-all duration-300 ease-cohere ${STEP_STYLE[step.state]}`}
@@ -67,7 +67,7 @@ export default function AIProcessingStatus({
               </div>
               <div
                 className={`font-caption text-[12px] ${
-                  step.state === "active" ? "text-cohere-action-blue" : "text-cohere-muted"
+                  step.state === "active" ? "text-cohere-action-blue" : "text-cohere-on-surface-variant"
                 }`}
               >
                 {step.detail}
@@ -79,15 +79,15 @@ export default function AIProcessingStatus({
 
       <div className="mt-md flex justify-between border-t border-cohere-hairline pt-md font-label-mono text-[10px]">
         <div className="flex flex-col">
-          <span className="text-cohere-muted">已完成</span>
+          <span className="text-cohere-on-surface-variant">已完成</span>
           <span className="font-label-mono-bold text-cohere-ink">{summary.done}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-cohere-muted">运行中</span>
+          <span className="text-cohere-on-surface-variant">运行中</span>
           <span className="font-label-mono-bold text-cohere-action-blue">{summary.running}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-cohere-muted">失败</span>
+          <span className="text-cohere-on-surface-variant">失败</span>
           <span className="font-label-mono-bold text-cohere-error">{summary.failed}</span>
         </div>
       </div>

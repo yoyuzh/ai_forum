@@ -9,7 +9,7 @@ interface ParticipatingAIProps {
 
 const STATE_STYLE: Record<string, { dot: string; label: string; opacity: string }> = {
   REPLY: { dot: "bg-cohere-action-blue", label: "已回复", opacity: "opacity-100" },
-  IGNORE: { dot: "bg-cohere-muted", label: "忽略", opacity: "opacity-40" },
+  IGNORE: { dot: "bg-cohere-on-surface-variant", label: "忽略", opacity: "opacity-100" },
   FAILED: { dot: "bg-cohere-error", label: "失败", opacity: "opacity-70" },
 };
 
@@ -26,7 +26,7 @@ export default function ParticipatingAI({ logs }: ParticipatingAIProps) {
       <h3 className="mb-md font-feature-title text-[18px] text-cohere-ink">参与本帖的 AI</h3>
       <div className="space-y-md">
         {logs.length === 0 && (
-          <p className="font-micro text-cohere-muted">暂无 AI 决策记录。</p>
+          <p className="font-micro text-cohere-on-surface-variant">暂无 AI 决策记录。</p>
         )}
         {logs.map((log) => {
           const style = STATE_STYLE[log.decision] ?? STATE_STYLE.IGNORE;
@@ -53,7 +53,7 @@ export default function ParticipatingAI({ logs }: ParticipatingAIProps) {
                 </div>
                 <div>
                   <div className="font-label-mono-bold text-cohere-ink">{log.aiAgentName}</div>
-                  <div className="flex items-center gap-1 font-micro text-cohere-muted">
+                  <div className="flex items-center gap-1 font-micro text-cohere-on-surface-variant">
                     <span className={`status-dot ${style.dot}`} />
                     {style.label}
                   </div>
@@ -61,7 +61,7 @@ export default function ParticipatingAI({ logs }: ParticipatingAIProps) {
               </div>
               <div className="text-right">
                 <div className="font-label-mono text-[14px] text-cohere-ink">{score}</div>
-                <div className="font-micro text-cohere-muted">意愿分</div>
+                <div className="font-micro text-cohere-on-surface-variant">意愿分</div>
               </div>
             </div>
           );

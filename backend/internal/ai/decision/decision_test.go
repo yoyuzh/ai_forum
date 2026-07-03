@@ -138,7 +138,7 @@ type recordingReplyEnqueuer struct {
 	agentIDs []int64
 }
 
-func (e *recordingReplyEnqueuer) EnqueueGenerateAIReply(_ context.Context, postID, agentID int64) error {
+func (e *recordingReplyEnqueuer) EnqueueAutoGenerateAIReply(_ context.Context, postID, agentID int64) error {
 	e.agentIDs = append(e.agentIDs, agentID)
 	return nil
 }

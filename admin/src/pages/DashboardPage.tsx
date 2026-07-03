@@ -7,16 +7,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
 } from "recharts";
 import { adminApi } from "../api/client";
 import StatCard from "../components/StatCard";
 import MaterialIcon from "../components/MaterialIcon";
-
-const PIE_COLORS = ["#35675d", "#417ef8", "#ba1a1a"];
 
 export default function DashboardPage() {
   const { data: stats } = useQuery({ queryKey: ["dashboard", "stats"], queryFn: adminApi.dashboard.stats });
@@ -45,7 +39,7 @@ export default function DashboardPage() {
     queryFn: adminApi.dashboard.decisionTimeline,
   });
 
-  const pieData = breakdown
+  const statusRows = breakdown
     ? [
         { name: "Success", value: breakdown.success },
         { name: "Running", value: breakdown.running },
@@ -122,30 +116,18 @@ export default function DashboardPage() {
 
         <div className="card-base p-lg">
           <h2 className="mb-md font-feature-title text-cohere-primary">AI 任务状态分布</h2>
-          <div className="flex h-64 w-full items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={80}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {pieData.map((_, idx) => (
-                    <Cell key={idx} fill={PIE_COLORS[idx]} />
-                  ))}
-                </Pie>
-                <Legend
-                  verticalAlign="bottom"
-                  iconType="circle"
-                  wrapperStyle={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}
-                />
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="flex h-64 w-full flex-col justify-center gap-md">
+            {statusRows.map((row) => (
+              <div key={row.name}>
+                <div className="mb-1 flex justify-between font-label-mono text-cohere-on-surface">
+                  <span>{row.name}</span>
+                  <span>{row.value}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-cohere-surface-variant">
+                  <div className="h-2 rounded-full bg-cohere-action-blue" style={{ width: `${row.value}%` }} />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

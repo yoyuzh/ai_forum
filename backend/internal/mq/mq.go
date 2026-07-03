@@ -74,12 +74,13 @@ func Topology() TopologySpec {
 		Bindings: []Binding{
 			{Exchange: ExchangeForumEvents, Queue: QueuePostTagging, RoutingKey: "post.created"},
 			{Exchange: ExchangeForumEvents, Queue: QueueSearchIndex, RoutingKey: "post.*"},
+			{Exchange: ExchangeForumEvents, Queue: QueueSearchIndex, RoutingKey: "comment.*"},
 			{Exchange: ExchangeForumEvents, Queue: QueueAuditLog, RoutingKey: "post.*"},
 			{Exchange: ExchangeForumEvents, Queue: QueueNotification, RoutingKey: "comment.created"},
 			{Exchange: ExchangeForumEvents, Queue: QueueNotification, RoutingKey: "user.mentioned"},
 			{Exchange: ExchangeAIEvents, Queue: QueueAIDecision, RoutingKey: "post.tagged"},
 			{Exchange: ExchangeAIEvents, Queue: QueueNotification, RoutingKey: "ai.reply.*"},
-			{Exchange: ExchangeAIEvents, Queue: QueueSearchIndex, RoutingKey: "ai.reply.completed"},
+			{Exchange: ExchangeAIEvents, Queue: QueueSearchIndex, RoutingKey: "ai.reply.*"},
 			{Exchange: ExchangeDead, Queue: QueueDead, RoutingKey: "#"},
 		},
 	}

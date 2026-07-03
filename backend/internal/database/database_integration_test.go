@@ -14,12 +14,16 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/mysql"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -287,6 +291,150 @@ func TestAIDomainSchemaAndSeedMatchesP6(t *testing.T) {
 	var preferenceCount int
 	require.NoError(t, db.GetContext(ctx, &preferenceCount, `SELECT COUNT(*) FROM ai_agent_tag_preferences`))
 	assert.GreaterOrEqual(t, preferenceCount, 5, "P6 dev seed must include tag preferences")
+}
+
+func TestAIReplyTasksSchemaMatchesP7(t *testing.T) {
+	db, m := newTestDB(t)
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		t.Fatalf("m.Up failed: %v", err)
+	}
+	ctx := context.Background()
+
+	for _, column := range []string{
+		"id", "post_id", "parent_comment_id", "parent_comment_id_norm", "ai_agent_id",
+		"trigger_type", "status", "attempt_count", "last_error", "comment_id",
+		"created_at", "updated_at",
+	} {
+		var count int
+		require.NoError(t, db.GetContext(ctx, &count, `
+			SELECT COUNT(*) FROM information_schema.columns
+			WHERE table_schema = DATABASE() AND table_name = 'ai_reply_tasks' AND column_name = ?`, column))
+		assert.Equal(t, 1, count, "ai_reply_tasks.%s must exist", column)
+	}
+
+	var generation string
+	require.NoError(t, db.GetContext(ctx, &generation, `
+		SELECT generation_expression
+		FROM information_schema.columns
+		WHERE table_schema = DATABASE()
+		  AND table_name = 'ai_reply_tasks'
+		  AND column_name = 'parent_comment_id_norm'`))
+	assert.Contains(t, generation, "coalesce(`parent_comment_id`,0)")
+
+	var uniqueColumns []string
+	require.NoError(t, db.SelectContext(ctx, &uniqueColumns, `
+		SELECT column_name
+		FROM information_schema.statistics
+		WHERE table_schema = DATABASE()
+		  AND table_name = 'ai_reply_tasks'
+		  AND index_name = 'uk_ai_reply_task'
+		ORDER BY seq_in_index`))
+	assert.Equal(t, []string{"post_id", "parent_comment_id_norm", "ai_agent_id", "trigger_type"}, uniqueColumns)
+
+	var aiReplyCountColumns int
+	require.NoError(t, db.GetContext(ctx, &aiReplyCountColumns, `
+		SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema = DATABASE() AND table_name = 'posts' AND column_name = 'ai_reply_count'`))
+	assert.Equal(t, 1, aiReplyCountColumns, "posts.ai_reply_count must exist for P7 counters")
+
+	var viewCountColumns int
+	require.NoError(t, db.GetContext(ctx, &viewCountColumns, `
+		SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema = DATABASE() AND table_name = 'posts' AND column_name = 'view_count'`))
+	assert.Equal(t, 1, viewCountColumns, "posts.view_count must exist for P10 hot score snapshots")
+
+	var triggerTypeColumns int
+	require.NoError(t, db.GetContext(ctx, &triggerTypeColumns, `
+		SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema = DATABASE() AND table_name = 'comments' AND column_name = 'trigger_type'`))
+	assert.Equal(t, 1, triggerTypeColumns, "comments.trigger_type must exist for P7 AI replies")
+}
+
+func TestNotificationsSchemaMatchesP9(t *testing.T) {
+	db, m := newTestDB(t)
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		t.Fatalf("m.Up failed: %v", err)
+	}
+	ctx := context.Background()
+
+	for _, column := range []string{"id", "recipient_id", "type", "payload", "read_at", "created_at"} {
+		var count int
+		require.NoError(t, db.GetContext(ctx, &count, `
+			SELECT COUNT(*) FROM information_schema.columns
+			WHERE table_schema = DATABASE() AND table_name = 'notifications' AND column_name = ?`, column))
+		assert.Equal(t, 1, count, "notifications.%s must exist", column)
+	}
+
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO notifications (recipient_id, type, payload)
+		VALUES (?, ?, JSON_OBJECT('post_id', ?))`, int64(1), "ai.reply.completed", int64(42))
+	require.NoError(t, err)
+}
+
+func TestAIReplyTasksConcurrentInsertTreatsConflictAsIdempotentSuccess(t *testing.T) {
+	db, m := newTestDB(t)
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		t.Fatalf("m.Up failed: %v", err)
+	}
+	ctx := context.Background()
+
+	postID := seedP7Post(t, ctx, db)
+
+	insert := func() error {
+		_, err := db.ExecContext(ctx, `
+			INSERT INTO ai_reply_tasks (post_id, parent_comment_id, ai_agent_id, trigger_type, status)
+			VALUES (?, NULL, ?, ?, ?)`,
+			postID, int64(1001), "AUTO", "PENDING")
+		if isDuplicateKey(err) {
+			return nil
+		}
+		return err
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- insert()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	var rows int
+	require.NoError(t, db.GetContext(ctx, &rows, `
+		SELECT COUNT(*) FROM ai_reply_tasks
+		WHERE post_id = ? AND parent_comment_id_norm = 0 AND ai_agent_id = ? AND trigger_type = ?`,
+		postID, int64(1001), "AUTO"))
+	assert.Equal(t, 1, rows)
+
+	var failed int
+	require.NoError(t, db.GetContext(ctx, &failed, `
+		SELECT COUNT(*) FROM ai_reply_tasks
+		WHERE post_id = ? AND status = 'FAILED'`, postID))
+	assert.Equal(t, 0, failed)
+}
+
+func seedP7Post(t *testing.T, ctx context.Context, db *sqlx.DB) int64 {
+	t.Helper()
+	res, err := db.ExecContext(ctx, `
+		INSERT INTO posts (author_id, title, content, status)
+		VALUES (?, ?, ?, ?)`, 1, "p7 post", "content", "NORMAL")
+	require.NoError(t, err)
+	id, err := res.LastInsertId()
+	require.NoError(t, err)
+	return id
+}
+
+func isDuplicateKey(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 ||
+		err != nil && strings.Contains(err.Error(), "Duplicate entry")
 }
 
 // TestSeedDevAdmin verifies 000004 leaves exactly one admin user and no AI

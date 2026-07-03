@@ -39,7 +39,7 @@ export default function PostCard({ post }: PostCardProps) {
             height={24}
             className="h-6 w-6 rounded-full bg-cohere-surface-variant"
           />
-          <span className="font-caption text-cohere-muted">
+          <span className="font-caption text-cohere-on-surface-variant">
             {post.author.role ? `${post.author.role} · ` : ""}
             {post.author.username}
           </span>
@@ -52,11 +52,11 @@ export default function PostCard({ post }: PostCardProps) {
         <div className="flex-grow" />
 
         <div className="flex items-center gap-xs">
-          <span className="hidden items-center gap-1 font-micro text-cohere-muted sm:flex">
+          <span className="hidden items-center gap-1 font-micro text-cohere-on-surface-variant sm:flex">
             <MaterialIcon name="visibility" size={14} />
             {formatCount(post.viewCount)}
           </span>
-          <span className="hidden items-center gap-1 font-micro text-cohere-muted sm:flex">
+          <span className="hidden items-center gap-1 font-micro text-cohere-on-surface-variant sm:flex">
             <MaterialIcon name="forum" size={14} />
             {post.commentCount}
           </span>
@@ -80,7 +80,7 @@ export default function PostCard({ post }: PostCardProps) {
         </div>
       </div>
 
-      <div className="mt-2 font-micro text-cohere-muted">{formatRelativeTime(post.createdAt)}</div>
+      <div className="mt-2 font-micro text-cohere-on-surface-variant">{formatRelativeTime(post.createdAt)}</div>
     </article>
   );
 }
