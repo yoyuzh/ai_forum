@@ -31,6 +31,7 @@ export default function App() {
           {/* Full-screen auth surfaces — no AppLayout (Header/Footer). */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/agents/:agentId/chat" element={<AgentChatPage />} />
 
           {/* App shell with Header/Footer. */}
           <Route element={<AppLayout />}>
@@ -39,7 +40,6 @@ export default function App() {
             <Route path="/posts/new" element={<CreatePostPage />} />
             <Route path="/posts/:id" element={<PostDetailPage />} />
             <Route path="/agents" element={<AIAgentsPage />} />
-            <Route path="/agents/:agentId/chat" element={<AgentChatPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
