@@ -184,37 +184,38 @@ func (a *App) NewAPIServer() Process {
 	searchStore := search.NewESIndexStore(a.ES)
 	searchQueryHandler := search.NewQueryHandler(a.DB, searchStore)
 	routes, err := businessRoutes(businessRouteDeps{
-		tokens:                   tokens,
-		register:                 http.HandlerFunc(userHandler.Register),
-		login:                    http.HandlerFunc(authHandler.Login),
-		profile:                  http.HandlerFunc(userHandler.Profile),
-		updateProfile:            http.HandlerFunc(userHandler.UpdateProfile),
-		profileStats:             http.HandlerFunc(userHandler.Stats),
-		listPosts:                http.HandlerFunc(postHandler.List),
-		getPost:                  http.HandlerFunc(postHandler.Get),
-		createPost:               http.HandlerFunc(postHandler.Create),
-		updatePost:               http.HandlerFunc(postHandler.UpdateOwn),
-		deletePost:               http.HandlerFunc(postHandler.Delete),
-		listComments:             http.HandlerFunc(commentHandler.List),
-		createComment:            http.HandlerFunc(commentHandler.Create),
-		likePost:                 http.HandlerFunc(likeHandler.Like),
-		unlikePost:               http.HandlerFunc(likeHandler.Unlike),
-		favoritePost:             http.HandlerFunc(favoriteHandler.Favorite),
-		unfavoritePost:           http.HandlerFunc(favoriteHandler.Unfavorite),
-		listNotifications:        http.HandlerFunc(notificationHTTPHandler.List),
-		unreadNotifications:      http.HandlerFunc(notificationHTTPHandler.UnreadCount),
-		markNotificationRead:     http.HandlerFunc(notificationHTTPHandler.MarkRead),
-		markAllNotificationsRead: http.HandlerFunc(notificationHTTPHandler.MarkAllRead),
-		postEvents:               sse.NewEventsHandler(hub),
-		aiStatus:                 sse.NewStatusHandler(sse.NewSQLStatusStore(a.DB)),
-		retryAIReplies:           retryAIReplies,
-		listAgentChats:           http.HandlerFunc(chatHandler.List),
-		createAgentChat:          http.HandlerFunc(chatHandler.Create),
-		getAgentChat:             http.HandlerFunc(chatHandler.Get),
-		sendAgentChatMessage:     http.HandlerFunc(chatHandler.Send),
-		searchPosts:              http.HandlerFunc(searchQueryHandler.SearchPosts),
-		updatePostStatus:         http.HandlerFunc(postHandler.UpdateStatus),
-		admin:                    adminHandler,
+		tokens:                      tokens,
+		register:                    http.HandlerFunc(userHandler.Register),
+		login:                       http.HandlerFunc(authHandler.Login),
+		profile:                     http.HandlerFunc(userHandler.Profile),
+		updateProfile:               http.HandlerFunc(userHandler.UpdateProfile),
+		profileStats:                http.HandlerFunc(userHandler.Stats),
+		listPosts:                   http.HandlerFunc(postHandler.List),
+		getPost:                     http.HandlerFunc(postHandler.Get),
+		createPost:                  http.HandlerFunc(postHandler.Create),
+		updatePost:                  http.HandlerFunc(postHandler.UpdateOwn),
+		deletePost:                  http.HandlerFunc(postHandler.Delete),
+		listComments:                http.HandlerFunc(commentHandler.List),
+		createComment:               http.HandlerFunc(commentHandler.Create),
+		likePost:                    http.HandlerFunc(likeHandler.Like),
+		unlikePost:                  http.HandlerFunc(likeHandler.Unlike),
+		favoritePost:                http.HandlerFunc(favoriteHandler.Favorite),
+		unfavoritePost:              http.HandlerFunc(favoriteHandler.Unfavorite),
+		listNotifications:           http.HandlerFunc(notificationHTTPHandler.List),
+		unreadNotifications:         http.HandlerFunc(notificationHTTPHandler.UnreadCount),
+		markNotificationRead:        http.HandlerFunc(notificationHTTPHandler.MarkRead),
+		markAllNotificationsRead:    http.HandlerFunc(notificationHTTPHandler.MarkAllRead),
+		postEvents:                  sse.NewEventsHandler(hub),
+		aiStatus:                    sse.NewStatusHandler(sse.NewSQLStatusStore(a.DB)),
+		retryAIReplies:              retryAIReplies,
+		listAgentChatConversations:  http.HandlerFunc(chatHandler.List),
+		getAgentChatConversation:    http.HandlerFunc(chatHandler.Get),
+		streamAgentChatMessage:      http.HandlerFunc(chatHandler.Stream),
+		deleteAgentChatConversation: http.HandlerFunc(chatHandler.Delete),
+		retryAgentChatMessage:       http.HandlerFunc(chatHandler.Retry),
+		searchPosts:                 http.HandlerFunc(searchQueryHandler.SearchPosts),
+		updatePostStatus:            http.HandlerFunc(postHandler.UpdateStatus),
+		admin:                       adminHandler,
 	})
 	if err != nil {
 		return NewErrorProcess(err)
@@ -228,37 +229,38 @@ func (a *App) NewAPIServer() Process {
 }
 
 type businessRouteDeps struct {
-	tokens                   *auth.TokenManager
-	register                 http.Handler
-	login                    http.Handler
-	profile                  http.Handler
-	updateProfile            http.Handler
-	profileStats             http.Handler
-	listPosts                http.Handler
-	getPost                  http.Handler
-	createPost               http.Handler
-	updatePost               http.Handler
-	deletePost               http.Handler
-	listComments             http.Handler
-	createComment            http.Handler
-	likePost                 http.Handler
-	unlikePost               http.Handler
-	favoritePost             http.Handler
-	unfavoritePost           http.Handler
-	listNotifications        http.Handler
-	unreadNotifications      http.Handler
-	markNotificationRead     http.Handler
-	markAllNotificationsRead http.Handler
-	postEvents               http.Handler
-	aiStatus                 http.Handler
-	retryAIReplies           http.Handler
-	listAgentChats           http.Handler
-	createAgentChat          http.Handler
-	getAgentChat             http.Handler
-	sendAgentChatMessage     http.Handler
-	searchPosts              http.Handler
-	updatePostStatus         http.Handler
-	admin                    *admin.Handler
+	tokens                      *auth.TokenManager
+	register                    http.Handler
+	login                       http.Handler
+	profile                     http.Handler
+	updateProfile               http.Handler
+	profileStats                http.Handler
+	listPosts                   http.Handler
+	getPost                     http.Handler
+	createPost                  http.Handler
+	updatePost                  http.Handler
+	deletePost                  http.Handler
+	listComments                http.Handler
+	createComment               http.Handler
+	likePost                    http.Handler
+	unlikePost                  http.Handler
+	favoritePost                http.Handler
+	unfavoritePost              http.Handler
+	listNotifications           http.Handler
+	unreadNotifications         http.Handler
+	markNotificationRead        http.Handler
+	markAllNotificationsRead    http.Handler
+	postEvents                  http.Handler
+	aiStatus                    http.Handler
+	retryAIReplies              http.Handler
+	listAgentChatConversations  http.Handler
+	getAgentChatConversation    http.Handler
+	streamAgentChatMessage      http.Handler
+	deleteAgentChatConversation http.Handler
+	retryAgentChatMessage       http.Handler
+	searchPosts                 http.Handler
+	updatePostStatus            http.Handler
+	admin                       *admin.Handler
 }
 
 func businessRoutes(deps businessRouteDeps) (router.BusinessRoutes, error) {
@@ -270,35 +272,36 @@ func businessRoutes(deps businessRouteDeps) (router.BusinessRoutes, error) {
 		return router.BusinessRoutes{}, err
 	}
 	routes := router.BusinessRoutes{
-		Register:                 deps.register,
-		Login:                    deps.login,
-		Profile:                  deps.tokens.Middleware(deps.profile),
-		UpdateProfile:            deps.tokens.Middleware(deps.updateProfile),
-		ProfileStats:             deps.tokens.Middleware(deps.profileStats),
-		ListPosts:                deps.listPosts,
-		GetPost:                  deps.getPost,
-		CreatePost:               deps.tokens.Middleware(deps.createPost),
-		UpdatePost:               deps.tokens.Middleware(deps.updatePost),
-		DeletePost:               deps.tokens.Middleware(authz.RequireSubject("post", "delete-any", deps.deletePost)),
-		ListComments:             deps.listComments,
-		CreateComment:            deps.tokens.Middleware(deps.createComment),
-		LikePost:                 deps.tokens.Middleware(deps.likePost),
-		UnlikePost:               deps.tokens.Middleware(deps.unlikePost),
-		FavoritePost:             deps.tokens.Middleware(deps.favoritePost),
-		UnfavoritePost:           deps.tokens.Middleware(deps.unfavoritePost),
-		ListNotifications:        deps.tokens.Middleware(deps.listNotifications),
-		UnreadNotifications:      deps.tokens.Middleware(deps.unreadNotifications),
-		MarkNotificationRead:     deps.tokens.Middleware(deps.markNotificationRead),
-		MarkAllNotificationsRead: deps.tokens.Middleware(deps.markAllNotificationsRead),
-		PostEvents:               deps.postEvents,
-		AIStatus:                 deps.aiStatus,
-		RetryAIReplies:           deps.retryAIReplies,
-		ListAgentChats:           deps.tokens.Middleware(deps.listAgentChats),
-		CreateAgentChat:          deps.tokens.Middleware(deps.createAgentChat),
-		GetAgentChat:             deps.tokens.Middleware(deps.getAgentChat),
-		SendAgentChatMessage:     deps.tokens.Middleware(deps.sendAgentChatMessage),
-		SearchPosts:              deps.searchPosts,
-		AdminUpdatePostStatus:    deps.tokens.Middleware(authz.RequireSubject("post", "delete-any", deps.updatePostStatus)),
+		Register:                    deps.register,
+		Login:                       deps.login,
+		Profile:                     deps.tokens.Middleware(deps.profile),
+		UpdateProfile:               deps.tokens.Middleware(deps.updateProfile),
+		ProfileStats:                deps.tokens.Middleware(deps.profileStats),
+		ListPosts:                   deps.listPosts,
+		GetPost:                     deps.getPost,
+		CreatePost:                  deps.tokens.Middleware(deps.createPost),
+		UpdatePost:                  deps.tokens.Middleware(deps.updatePost),
+		DeletePost:                  deps.tokens.Middleware(authz.RequireSubject("post", "delete-any", deps.deletePost)),
+		ListComments:                deps.listComments,
+		CreateComment:               deps.tokens.Middleware(deps.createComment),
+		LikePost:                    deps.tokens.Middleware(deps.likePost),
+		UnlikePost:                  deps.tokens.Middleware(deps.unlikePost),
+		FavoritePost:                deps.tokens.Middleware(deps.favoritePost),
+		UnfavoritePost:              deps.tokens.Middleware(deps.unfavoritePost),
+		ListNotifications:           deps.tokens.Middleware(deps.listNotifications),
+		UnreadNotifications:         deps.tokens.Middleware(deps.unreadNotifications),
+		MarkNotificationRead:        deps.tokens.Middleware(deps.markNotificationRead),
+		MarkAllNotificationsRead:    deps.tokens.Middleware(deps.markAllNotificationsRead),
+		PostEvents:                  deps.postEvents,
+		AIStatus:                    deps.aiStatus,
+		RetryAIReplies:              deps.retryAIReplies,
+		ListAgentChatConversations:  deps.tokens.Middleware(deps.listAgentChatConversations),
+		GetAgentChatConversation:    deps.tokens.Middleware(deps.getAgentChatConversation),
+		StreamAgentChatMessage:      deps.tokens.Middleware(deps.streamAgentChatMessage),
+		DeleteAgentChatConversation: deps.tokens.Middleware(deps.deleteAgentChatConversation),
+		RetryAgentChatMessage:       deps.tokens.Middleware(deps.retryAgentChatMessage),
+		SearchPosts:                 deps.searchPosts,
+		AdminUpdatePostStatus:       deps.tokens.Middleware(authz.RequireSubject("post", "delete-any", deps.updatePostStatus)),
 	}
 	if deps.admin != nil {
 		routes.ListAgents = http.HandlerFunc(deps.admin.ListPublicAgents)

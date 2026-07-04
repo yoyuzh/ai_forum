@@ -17,6 +17,8 @@ import {
   AIChatSendResult,
   AIChatSession,
   AIChatSessionSummary,
+  AIChatSessionPage,
+  AIChatStreamHandler,
 } from "./types";
 import { runBackgroundAISimulation } from "../sse/simulator";
 
@@ -54,6 +56,9 @@ function createMockChat(agentId: number): AIChat {
     userId: 1,
     aiAgentId: agentId,
     title: agent.displayName,
+    status: "ACTIVE" as const,
+    lastMessagePreview: "",
+    messageCount: 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -67,17 +72,13 @@ function getMockChat(agentId: number, sessionId?: number): AIChat {
   if (!agent) throw new Error("Agent not found");
   let session = sessionId ? chatSessions.get(sessionId) : undefined;
   if (session && session.aiAgentId !== agentId) throw new Error("Session not found");
-  if (!session) {
-    session = Array.from(chatSessions.values())
-      .filter((item) => item.aiAgentId === agentId)
-      .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))[0];
-  }
-  if (!session) return createMockChat(agentId);
+  if (!session) throw new Error("Session not found");
   return { session, agent, messages: chatMessages.get(session.id) ?? [] };
 }
 
-function listMockChats(): AIChatSessionSummary[] {
-  return Array.from(chatSessions.values())
+function listMockChats(): AIChatSessionPage {
+  const items = Array.from(chatSessions.values())
+    .filter((session) => session.status !== "DELETED" && session.messageCount > 0)
     .map((session) => {
       const agent = db.getAgent(session.aiAgentId);
       if (!agent) return null;
@@ -91,6 +92,7 @@ function listMockChats(): AIChatSessionSummary[] {
     })
     .filter((item): item is AIChatSessionSummary => Boolean(item))
     .sort((a, b) => +new Date(b.session.updatedAt) - +new Date(a.session.updatedAt));
+  return { items, page: 1, pageSize: 20, total: items.length };
 }
 
 function createMockChatMessage(sessionId: number, role: AIChatMessage["role"], content: string): AIChatMessage {
@@ -99,14 +101,24 @@ function createMockChatMessage(sessionId: number, role: AIChatMessage["role"], c
     sessionId,
     role,
     content,
+    status: "DONE" as const,
+    sequenceNo: (chatMessages.get(sessionId)?.length ?? 0) + 1,
+    requestId: null,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
   chatMessages.set(sessionId, [...(chatMessages.get(sessionId) ?? []), message]);
   for (const [sessionKey, session] of chatSessions) {
     if (session.id === sessionId) {
       const messages = chatMessages.get(sessionId) ?? [];
       const title = messages.length === 1 ? titleFromContent(content) : session.title;
-      chatSessions.set(sessionKey, { ...session, title, updatedAt: message.createdAt });
+      chatSessions.set(sessionKey, {
+        ...session,
+        title,
+        lastMessagePreview: content,
+        messageCount: messages.length,
+        updatedAt: message.createdAt,
+      });
       break;
     }
   }
@@ -209,20 +221,54 @@ export const mockApi: ApiClient = {
   },
 
   chat: {
-    list: async (): Promise<AIChatSessionSummary[]> => delay(listMockChats()),
-    create: async (agentId: number): Promise<AIChat> => delay(createMockChat(agentId)),
-    get: async (agentId: number, sessionId?: number): Promise<AIChat> => delay(getMockChat(agentId, sessionId)),
-    sendMessage: async (agentId: number, content: string, sessionId?: number): Promise<AIChatSendResult> => {
-      const chat = getMockChat(agentId, sessionId);
+    list: async (): Promise<AIChatSessionPage> => delay(listMockChats()),
+    get: async (conversationId: number): Promise<AIChat> => {
+      const session = chatSessions.get(conversationId);
+      if (!session) throw new Error("Session not found");
+      return delay(getMockChat(session.aiAgentId, conversationId));
+    },
+    sendMessage: async (
+      agentId: number,
+      content: string,
+      conversationId: number | null,
+      requestId: string,
+      onEvent?: AIChatStreamHandler,
+    ): Promise<AIChatSendResult> => {
+      const chat = conversationId ? getMockChat(agentId, conversationId) : createMockChat(agentId);
       const trimmed = content.trim();
       if (!trimmed) throw new Error("请输入消息内容");
-      const userMessage = createMockChatMessage(chat.session.id, "user", trimmed);
+      if (!conversationId) {
+        onEvent?.({ event: "conversation_created", data: { conversationId: chat.session.id, session: chat.session } });
+      }
+      const userMessage = { ...createMockChatMessage(chat.session.id, "user", trimmed), requestId };
+      onEvent?.({ event: "user_message_saved", data: { message: userMessage, messageId: userMessage.id, sequenceNo: userMessage.sequenceNo } });
       const assistantMessage = createMockChatMessage(
         chat.session.id,
         "assistant",
         `${chat.agent.displayName}：我先按自己的视角回应你。${trimmed.length > 24 ? trimmed.slice(0, 24) + "…" : trimmed}`,
       );
-      return delay({ session: chatSessions.get(chat.session.id) ?? chat.session, userMessage, assistantMessage });
+      onEvent?.({ event: "ai_message_created", data: { message: { ...assistantMessage, content: "", status: "STREAMING" }, messageId: assistantMessage.id, sequenceNo: assistantMessage.sequenceNo } });
+      onEvent?.({ event: "token", data: { content: assistantMessage.content } });
+      const session = chatSessions.get(chat.session.id) ?? chat.session;
+      onEvent?.({ event: "done", data: { message: assistantMessage, messageId: assistantMessage.id, status: "DONE", session } });
+      return delay({ session, userMessage, assistantMessage });
+    },
+    retryMessage: async (messageId: number, _requestId: string, onEvent?: AIChatStreamHandler): Promise<AIChatMessage> => {
+      for (const messages of chatMessages.values()) {
+        const message = messages.find((item) => item.id === messageId);
+        if (message) {
+          message.status = "DONE";
+          message.content = "重新生成后的回复。";
+          onEvent?.({ event: "done", data: { message, messageId, status: "DONE", session: chatSessions.get(message.sessionId)! } });
+          return delay(message);
+        }
+      }
+      throw new Error("Message not found");
+    },
+    deleteConversation: async (conversationId: number) => {
+      const session = chatSessions.get(conversationId);
+      if (session) chatSessions.set(conversationId, { ...session, status: "DELETED" });
+      return delay({ success: true });
     },
   },
 

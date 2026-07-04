@@ -1,13 +1,16 @@
-import { setAuthToken } from "./auth";
+import { getAuthToken, setAuthToken } from "./auth";
 import { aiAgentAvatar } from "./agentAvatars";
 import { aiAgentProfile } from "./agentProfiles";
 import { defaultUserAvatar } from "../assets/brand";
-import { http } from "./httpClient";
+import { HttpError, apiURL, http } from "./httpClient";
 import type {
   AIAgent,
   AIChat,
   AIChatMessage,
   AIChatSendResult,
+  AIChatSessionPage,
+  AIChatStreamEvent,
+  AIChatStreamHandler,
   AIChatSession,
   AIChatSessionSummary,
   AIDecisionLog,
@@ -93,12 +96,21 @@ type BackendChatMessage = {
   id: number;
   sessionId?: number;
   session_id?: number;
-  role: AIChatMessage["role"];
+  role?: AIChatMessage["role"] | "USER" | "AI";
+  senderType?: "USER" | "AI";
+  sender_type?: "USER" | "AI";
   content: string;
+  status?: AIChatMessage["status"];
+  sequenceNo?: number;
+  sequence_no?: number;
+  requestId?: string | null;
+  request_id?: string | null;
   errorMessage?: string | null;
   error_message?: string | null;
   createdAt?: string;
   created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
 };
 
 type BackendChatSession = {
@@ -108,6 +120,11 @@ type BackendChatSession = {
   aiAgentId?: number;
   ai_agent_id?: number;
   title: string;
+  status?: AIChatSession["status"];
+  lastMessagePreview?: string;
+  last_message_preview?: string;
+  messageCount?: number;
+  message_count?: number;
   createdAt?: string;
   created_at?: string;
   updatedAt?: string;
@@ -129,10 +146,12 @@ type BackendChatSessionSummary = {
   message_count?: number;
 };
 
-type BackendChatSendResult = {
-  session: BackendChatSession;
-  userMessage: BackendChatMessage;
-  assistantMessage?: BackendChatMessage;
+type BackendChatSessionPage = {
+  items: BackendChatSessionSummary[];
+  page: number;
+  pageSize?: number;
+  page_size?: number;
+  total: number;
 };
 
 type BackendTask = {
@@ -328,19 +347,27 @@ function chatSessionFromBackend(s: BackendChatSession): AIChatSession {
     userId: s.userId ?? s.user_id ?? 0,
     aiAgentId: s.aiAgentId ?? s.ai_agent_id ?? 0,
     title: s.title,
+    status: s.status ?? "ACTIVE",
+    lastMessagePreview: s.lastMessagePreview ?? s.last_message_preview ?? "",
+    messageCount: s.messageCount ?? s.message_count ?? 0,
     createdAt: s.createdAt ?? s.created_at ?? new Date().toISOString(),
     updatedAt: s.updatedAt ?? s.updated_at ?? new Date().toISOString(),
   };
 }
 
 function chatMessageFromBackend(m: BackendChatMessage): AIChatMessage {
+  const sender = m.senderType ?? m.sender_type ?? m.role;
   return {
     id: m.id,
     sessionId: m.sessionId ?? m.session_id ?? 0,
-    role: m.role,
+    role: sender === "USER" ? "user" : sender === "AI" ? "assistant" : (m.role as AIChatMessage["role"]),
     content: m.content,
+    status: m.status ?? "DONE",
+    sequenceNo: m.sequenceNo ?? m.sequence_no ?? m.id,
+    requestId: m.requestId ?? m.request_id ?? null,
     errorMessage: m.errorMessage ?? m.error_message ?? null,
     createdAt: m.createdAt ?? m.created_at ?? new Date().toISOString(),
+    updatedAt: m.updatedAt ?? m.updated_at ?? m.createdAt ?? m.created_at ?? new Date().toISOString(),
   };
 }
 
@@ -361,6 +388,84 @@ function chatSessionSummaryFromBackend(row: BackendChatSessionSummary): AIChatSe
     lastMessage: row.lastMessage ?? row.last_message ?? "",
     messageCount: row.messageCount ?? row.message_count ?? 0,
   };
+}
+
+function chatSessionPageFromBackend(page: BackendChatSessionPage): AIChatSessionPage {
+  return {
+    items: page.items.map(chatSessionSummaryFromBackend),
+    page: page.page,
+    pageSize: page.pageSize ?? page.page_size ?? 20,
+    total: page.total,
+  };
+}
+
+function streamEventFromBackend(event: string, data: unknown): AIChatStreamEvent {
+  const payload = data as any;
+  if (event === "conversation_created") {
+    return { event, data: { ...payload, session: chatSessionFromBackend(payload.session) } };
+  }
+  if (event === "user_message_saved" || event === "ai_message_created") {
+    return { event, data: { ...payload, message: chatMessageFromBackend(payload.message) } } as AIChatStreamEvent;
+  }
+  if (event === "done") {
+    return { event, data: { ...payload, session: chatSessionFromBackend(payload.session), message: chatMessageFromBackend(payload.message) } };
+  }
+  if (event === "error") {
+    return { event, data: { ...payload, aiMessage: payload.aiMessage ? chatMessageFromBackend(payload.aiMessage) : undefined } };
+  }
+  return { event: "token", data: payload };
+}
+
+async function postChatStream(
+  path: string,
+  body: unknown,
+  onEvent?: AIChatStreamHandler,
+): Promise<{ session?: AIChatSession; userMessage?: AIChatMessage; assistantMessage?: AIChatMessage }> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  const token = getAuthToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(apiURL(path), { method: "POST", headers, body: JSON.stringify(body) });
+  if (!response.ok) throw new HttpError(response.status, await response.text());
+  if (!response.body) throw new HttpError(500, "stream unavailable");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const state: { session?: AIChatSession; userMessage?: AIChatMessage; assistantMessage?: AIChatMessage } = {};
+
+  const handleBlock = (block: string) => {
+    let event = "message";
+    const dataLines: string[] = [];
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+    }
+    if (!dataLines.length) return;
+    const parsed = streamEventFromBackend(event, JSON.parse(dataLines.join("\n")));
+    if (parsed.event === "conversation_created") state.session = parsed.data.session;
+    if (parsed.event === "user_message_saved") state.userMessage = parsed.data.message;
+    if (parsed.event === "ai_message_created") state.assistantMessage = parsed.data.message;
+    if (parsed.event === "token" && state.assistantMessage) {
+      state.assistantMessage = { ...state.assistantMessage, content: `${state.assistantMessage.content}${parsed.data.content}` };
+    }
+    if (parsed.event === "done") {
+      state.session = parsed.data.session;
+      state.assistantMessage = parsed.data.message;
+    }
+    if (parsed.event === "error" && parsed.data.aiMessage) state.assistantMessage = parsed.data.aiMessage;
+    onEvent?.(parsed);
+  };
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() ?? "";
+    blocks.forEach(handleBlock);
+  }
+  if (buffer.trim()) handleBlock(buffer);
+  return state;
 }
 
 function taskFromBackend(t: BackendTask): AIReplyTask {
@@ -479,40 +584,49 @@ export const realApi: ApiClient = {
   },
 
   chat: {
-    list: async (): Promise<AIChatSessionSummary[]> =>
-      (await http<BackendChatSessionSummary[]>("/api/agent-chats", { skipAuthRedirect: true })).map(
-        chatSessionSummaryFromBackend,
-      ),
-    create: async (agentId: number): Promise<AIChat> =>
-      chatFromBackend(
-        agentId,
-        await http<BackendChat>(`/api/agents/${agentId}/chat`, {
-          method: "POST",
+    list: async (input = {}): Promise<AIChatSessionPage> => {
+      const params = new URLSearchParams();
+      if (input.page) params.set("page", String(input.page));
+      if (input.pageSize) params.set("pageSize", String(input.pageSize));
+      if (input.agentId) params.set("agentId", String(input.agentId));
+      const qs = params.toString();
+      return chatSessionPageFromBackend(
+        await http<BackendChatSessionPage>(`/api/ai-chat/conversations${qs ? `?${qs}` : ""}`, {
           skipAuthRedirect: true,
         }),
-      ),
-    get: async (agentId: number, sessionId?: number): Promise<AIChat> =>
-      chatFromBackend(
-        agentId,
-        await http<BackendChat>(
-          `/api/agents/${agentId}/chat${sessionId ? `?sessionId=${sessionId}` : ""}`,
-          { skipAuthRedirect: true },
-        ),
-      ),
-    sendMessage: async (agentId: number, content: string, sessionId?: number): Promise<AIChatSendResult> => {
-      const result = await http<BackendChatSendResult>(`/api/agents/${agentId}/chat/messages`, {
-        method: "POST",
+      );
+    },
+    get: async (conversationId: number): Promise<AIChat> => {
+      const chat = await http<BackendChat>(`/api/ai-chat/conversations/${conversationId}/messages`, {
         skipAuthRedirect: true,
-        body: JSON.stringify({ content, sessionId }),
       });
+      return chatFromBackend(chat.session.aiAgentId ?? chat.session.ai_agent_id ?? 0, chat);
+    },
+    sendMessage: async (agentId, content, conversationId, requestId, onEvent): Promise<AIChatSendResult> => {
+      const result = await postChatStream(
+        "/api/ai-chat/messages/stream",
+        { conversationId, agentId, content, requestId },
+        onEvent,
+      );
+      if (!result.session || !result.userMessage || !result.assistantMessage) {
+        throw new HttpError(502, "incomplete chat stream");
+      }
       return {
-        session: chatSessionFromBackend(result.session),
-        userMessage: chatMessageFromBackend(result.userMessage),
-        assistantMessage: result.assistantMessage
-          ? chatMessageFromBackend(result.assistantMessage)
-          : undefined,
+        session: result.session,
+        userMessage: result.userMessage,
+        assistantMessage: result.assistantMessage,
       };
     },
+    retryMessage: async (messageId, requestId, onEvent): Promise<AIChatMessage> => {
+      const result = await postChatStream(`/api/ai-chat/messages/${messageId}/retry`, { requestId }, onEvent);
+      if (!result.assistantMessage) throw new HttpError(502, "incomplete retry stream");
+      return result.assistantMessage;
+    },
+    deleteConversation: (conversationId: number) =>
+      http<{ success: boolean }>(`/api/ai-chat/conversations/${conversationId}`, {
+        method: "DELETE",
+        skipAuthRedirect: true,
+      }),
   },
 
   tasks: { list: async (): Promise<AIReplyTask[]> => (await http<BackendTask[]>("/api/ai-tasks")).map(taskFromBackend) },

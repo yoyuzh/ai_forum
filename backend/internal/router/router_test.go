@@ -127,13 +127,19 @@ func TestRouterMountsBusinessRoutes(t *testing.T) {
 		ListAgents: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
-		ListAgentChats: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ListAgentChatConversations: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
-		GetAgentChat: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		GetAgentChatConversation: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
-		SendAgentChatMessage: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		StreamAgentChatMessage: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusCreated)
+		}),
+		DeleteAgentChatConversation: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+		RetryAgentChatMessage: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusCreated)
 		}),
 		ListAITasks: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -196,9 +202,11 @@ func TestRouterMountsBusinessRoutes(t *testing.T) {
 		{http.MethodGet, "/api/posts/42/events", http.StatusOK},
 		{http.MethodGet, "/api/posts/42/ai-status", http.StatusOK},
 		{http.MethodGet, "/api/agents", http.StatusOK},
-		{http.MethodGet, "/api/agent-chats", http.StatusOK},
-		{http.MethodGet, "/api/agents/1001/chat", http.StatusOK},
-		{http.MethodPost, "/api/agents/1001/chat/messages", http.StatusCreated},
+		{http.MethodGet, "/api/ai-chat/conversations", http.StatusOK},
+		{http.MethodGet, "/api/ai-chat/conversations/1001/messages", http.StatusOK},
+		{http.MethodPost, "/api/ai-chat/messages/stream", http.StatusCreated},
+		{http.MethodDelete, "/api/ai-chat/conversations/1001", http.StatusOK},
+		{http.MethodPost, "/api/ai-chat/messages/2002/retry", http.StatusCreated},
 		{http.MethodGet, "/api/ai-tasks", http.StatusOK},
 		{http.MethodGet, "/api/decision-logs", http.StatusOK},
 		{http.MethodGet, "/api/posts/42/decision-logs", http.StatusOK},

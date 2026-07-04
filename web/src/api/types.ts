@@ -85,8 +85,12 @@ export interface AIChatMessage {
   sessionId: number;
   role: "user" | "assistant";
   content: string;
+  status: "PENDING" | "STREAMING" | "DONE" | "FAILED" | "PARTIAL";
+  sequenceNo: number;
+  requestId?: string | null;
   errorMessage?: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface AIChatSession {
@@ -94,6 +98,9 @@ export interface AIChatSession {
   userId: number;
   aiAgentId: number;
   title: string;
+  status: "ACTIVE" | "ARCHIVED" | "DELETED";
+  lastMessagePreview: string;
+  messageCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -116,6 +123,23 @@ export interface AIChatSessionSummary {
   lastMessage: string;
   messageCount: number;
 }
+
+export interface AIChatSessionPage {
+  items: AIChatSessionSummary[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export type AIChatStreamEvent =
+  | { event: "conversation_created"; data: { conversationId: number; session: AIChatSession } }
+  | { event: "user_message_saved"; data: { message: AIChatMessage; messageId: number; sequenceNo: number } }
+  | { event: "ai_message_created"; data: { message: AIChatMessage; messageId: number; sequenceNo: number } }
+  | { event: "token"; data: { content: string } }
+  | { event: "done"; data: { message: AIChatMessage; messageId: number; status: AIChatMessage["status"]; session: AIChatSession } }
+  | { event: "error"; data: { code: string; message: string; messageId?: number; aiMessage?: AIChatMessage } };
+
+export type AIChatStreamHandler = (event: AIChatStreamEvent) => void;
 
 export type TaskStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
@@ -289,10 +313,17 @@ export interface ApiClient {
     update: (id: number, updates: Partial<AIAgent>) => Promise<AIAgent>;
   };
   chat: {
-    list: () => Promise<AIChatSessionSummary[]>;
-    create: (agentId: number) => Promise<AIChat>;
-    get: (agentId: number, sessionId?: number) => Promise<AIChat>;
-    sendMessage: (agentId: number, content: string, sessionId?: number) => Promise<AIChatSendResult>;
+    list: (input?: { page?: number; pageSize?: number; agentId?: number }) => Promise<AIChatSessionPage>;
+    get: (conversationId: number) => Promise<AIChat>;
+    sendMessage: (
+      agentId: number,
+      content: string,
+      conversationId: number | null,
+      requestId: string,
+      onEvent?: AIChatStreamHandler,
+    ) => Promise<AIChatSendResult>;
+    retryMessage: (messageId: number, requestId: string, onEvent?: AIChatStreamHandler) => Promise<AIChatMessage>;
+    deleteConversation: (conversationId: number) => Promise<{ success: boolean }>;
   };
   tasks: { list: () => Promise<AIReplyTask[]> };
   decisionLogs: {

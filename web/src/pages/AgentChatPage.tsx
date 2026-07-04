@@ -25,11 +25,13 @@ export default function AgentChatPage() {
     chat,
     isLoading,
     error,
-    createChat,
-    isCreatingChat,
     sendMessage,
     isSending,
     sendError,
+    retryMessage,
+    isRetrying,
+    deleteConversation,
+    isDeleting,
   } = useAgentChat(agentId, sessionId);
   const runtimeMessages = useMemo(
     () => (chat?.messages ?? []).map(toThreadMessage),
@@ -41,7 +43,9 @@ export default function AgentChatPage() {
     isRunning: isSending,
     onNew: async (message) => {
       const text = appendMessageText(message);
-      if (text) await sendMessage(text);
+      if (!text || isSending) return;
+      const result = await sendMessage(text);
+      if (!sessionId) navigate(`/agents/${result.session.aiAgentId}/chat?sessionId=${result.session.id}`, { replace: true });
     },
   });
   const filteredHistory = useMemo(() => {
@@ -53,8 +57,8 @@ export default function AgentChatPage() {
   }, [history, historyQuery]);
 
   const startNewChat = async () => {
-    const next = await createChat();
-    navigate(`/agents/${next.session.aiAgentId}/chat?sessionId=${next.session.id}`, { replace: false });
+    if (isSending) return;
+    navigate(`/agents/${agentId}/chat`);
   };
 
   if (Number.isNaN(agentId)) return <ChatState title="无效的 AI 角色" />;
@@ -78,11 +82,11 @@ export default function AgentChatPage() {
               <button
                 type="button"
                 onClick={startNewChat}
-                disabled={isCreatingChat}
+                disabled={isSending}
                 className="flex w-full items-center justify-center gap-sm rounded-pill bg-cohere-primary px-md py-sm font-label-mono-bold text-cohere-on-primary transition-opacity hover:opacity-90"
               >
                 <MaterialIcon name="add" size={16} />
-                {isCreatingChat ? "创建中" : "新对话"}
+                新对话
               </button>
               <div className="relative mt-xs">
                 <MaterialIcon
@@ -110,11 +114,14 @@ export default function AgentChatPage() {
                     <Link
                       key={item.session.id}
                       to={`/agents/${item.session.aiAgentId}/chat?sessionId=${item.session.id}`}
+                      onClick={(event) => {
+                        if (isSending) event.preventDefault();
+                      }}
                       className={`rounded-sm border p-sm transition-colors ${
-                        item.session.id === chat.session.id
+                        item.session.id === chat.session.id && chat.session.id > 0
                           ? "border-cohere-hairline bg-cohere-soft-stone"
                           : "border-transparent hover:bg-cohere-surface-low"
-                      }`}
+                      } ${isSending ? "pointer-events-none opacity-60" : ""}`}
                     >
                       <div className="truncate font-body-main font-medium text-cohere-on-surface">
                         {item.session.title || item.agent.displayName}
@@ -147,13 +154,20 @@ export default function AgentChatPage() {
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-full text-cohere-muted hover:text-cohere-primary"
-                aria-label="更多操作"
-              >
-                <MaterialIcon name="more_horiz" size={22} />
-              </button>
+              {chat.session.id > 0 && (
+                <button
+                  type="button"
+                  disabled={isSending || isDeleting}
+                  onClick={async () => {
+                    await deleteConversation(chat.session.id);
+                    navigate(`/agents/${chat.agent.id}/chat`, { replace: true });
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-cohere-muted hover:text-cohere-primary disabled:opacity-50"
+                  aria-label="删除会话"
+                >
+                  <MaterialIcon name="delete" size={20} />
+                </button>
+              )}
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-md py-xl md:px-section">
@@ -168,7 +182,13 @@ export default function AgentChatPage() {
               ) : (
                 <div className="mx-auto flex max-w-[620px] flex-col gap-lg">
                   {chat.messages.map((message) => (
-                    <ChatBubble key={message.id} message={message} agent={chat.agent} />
+                    <ChatBubble
+                      key={message.id}
+                      message={message}
+                      agent={chat.agent}
+                      onRetry={() => retryMessage(message.id)}
+                      retrying={isRetrying}
+                    />
                   ))}
                   {isSending && <PendingBubble agent={chat.agent} />}
                 </div>
@@ -187,10 +207,13 @@ export default function AgentChatPage() {
                   <ComposerPrimitive.Input
                     rows={1}
                     submitMode="enter"
+                    disabled={isSending}
                     placeholder="输入消息..."
                     className="min-h-12 max-h-32 w-full resize-none rounded-pill border-none bg-cohere-soft-stone py-3 pl-md pr-14 font-body-main text-cohere-on-surface outline-none placeholder:text-cohere-muted focus:ring-1 focus:ring-cohere-secondary"
                   />
-                  <ComposerPrimitive.Send className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-cohere-primary text-cohere-on-primary transition-opacity hover:opacity-80">
+                  <ComposerPrimitive.Send
+                    className={`absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-cohere-primary text-cohere-on-primary transition-opacity hover:opacity-80 ${isSending ? "pointer-events-none opacity-50" : ""}`}
+                  >
                     <MaterialIcon name="arrow_upward" size={18} />
                   </ComposerPrimitive.Send>
                 </div>
@@ -344,7 +367,17 @@ function ParamRow({ label, value, last = false }: { label: string; value: string
   );
 }
 
-function ChatBubble({ message, agent }: { message: AIChatMessage; agent: AIAgent }) {
+function ChatBubble({
+  message,
+  agent,
+  onRetry,
+  retrying,
+}: {
+  message: AIChatMessage;
+  agent: AIAgent;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
   const isUser = message.role === "user";
   if (isUser) {
     return (
@@ -361,10 +394,27 @@ function ChatBubble({ message, agent }: { message: AIChatMessage; agent: AIAgent
     <div className="flex items-start gap-md">
       <AgentAvatar agent={agent} size="sm" className="mt-xs" />
       <div className="max-w-[560px] rounded-ai rounded-tl-sm border border-cohere-hairline bg-cohere-surface-lowest px-lg py-md text-cohere-on-surface">
-        <SafeMarkdown
-          content={message.content}
-          className="space-y-md font-body-main text-cohere-on-surface [&_h1]:font-body-large [&_h2]:font-body-large [&_h3]:font-body-large [&_li]:ml-md [&_ul]:list-disc [&_p]:text-cohere-on-surface"
-        />
+        {message.content ? (
+          <SafeMarkdown
+            content={message.content}
+            className="space-y-md font-body-main text-cohere-on-surface [&_h1]:font-body-large [&_h2]:font-body-large [&_h3]:font-body-large [&_li]:ml-md [&_ul]:list-disc [&_p]:text-cohere-on-surface"
+          />
+        ) : (
+          <p className="font-body-main text-cohere-muted">正在生成回复...</p>
+        )}
+        {(message.status === "FAILED" || message.status === "PARTIAL") && (
+          <div className="mt-md flex items-center justify-between gap-md rounded-sm bg-cohere-error-container px-sm py-xs font-caption text-cohere-error">
+            <span>{message.errorMessage || "回复生成失败"}</span>
+            <button
+              type="button"
+              disabled={retrying}
+              onClick={onRetry}
+              className="rounded-pill bg-cohere-primary px-sm py-xs font-label-mono-bold text-cohere-on-primary disabled:opacity-50"
+            >
+              {retrying ? "重试中" : "重新生成"}
+            </button>
+          </div>
+        )}
         <div className="mt-md border-t border-cohere-hairline pt-sm text-right font-micro text-cohere-muted">
           {formatTime(message.createdAt)}
         </div>

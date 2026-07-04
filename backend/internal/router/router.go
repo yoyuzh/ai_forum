@@ -15,61 +15,62 @@ type Dependency struct {
 }
 
 type BusinessRoutes struct {
-	Register                  http.Handler
-	Login                     http.Handler
-	Profile                   http.Handler
-	UpdateProfile             http.Handler
-	ProfileStats              http.Handler
-	ListPosts                 http.Handler
-	GetPost                   http.Handler
-	CreatePost                http.Handler
-	UpdatePost                http.Handler
-	DeletePost                http.Handler
-	ListComments              http.Handler
-	CreateComment             http.Handler
-	LikePost                  http.Handler
-	UnlikePost                http.Handler
-	FavoritePost              http.Handler
-	UnfavoritePost            http.Handler
-	ListNotifications         http.Handler
-	UnreadNotifications       http.Handler
-	MarkNotificationRead      http.Handler
-	MarkAllNotificationsRead  http.Handler
-	PostEvents                http.Handler
-	AIStatus                  http.Handler
-	RetryAIReplies            http.Handler
-	ListAgents                http.Handler
-	ListAgentChats            http.Handler
-	CreateAgentChat           http.Handler
-	GetAgentChat              http.Handler
-	SendAgentChatMessage      http.Handler
-	ListAITasks               http.Handler
-	ListDecisionLogs          http.Handler
-	ListPostDecisionLogs      http.Handler
-	ListPostAITasks           http.Handler
-	ListAIActivities          http.Handler
-	SearchPosts               http.Handler
-	AdminUpdatePostStatus     http.Handler
-	AdminDashboardStats       http.Handler
-	AdminDashboardTrend       http.Handler
-	AdminDashboardBreakdown   http.Handler
-	AdminDashboardServices    http.Handler
-	AdminDashboardRecentPosts http.Handler
-	AdminDashboardRecentTasks http.Handler
-	AdminDashboardDecisions   http.Handler
-	AdminPermissions          http.Handler
-	AdminListUsers            http.Handler
-	AdminListPosts            http.Handler
-	AdminListComments         http.Handler
-	AdminListAgents           http.Handler
-	AdminUpdateAgent          http.Handler
-	AdminListTasks            http.Handler
-	AdminRetryTask            http.Handler
-	AdminTerminateTask        http.Handler
-	AdminMarkTaskProcessed    http.Handler
-	AdminListDecisionLogs     http.Handler
-	AdminListTags             http.Handler
-	AdminListPreferences      http.Handler
+	Register                    http.Handler
+	Login                       http.Handler
+	Profile                     http.Handler
+	UpdateProfile               http.Handler
+	ProfileStats                http.Handler
+	ListPosts                   http.Handler
+	GetPost                     http.Handler
+	CreatePost                  http.Handler
+	UpdatePost                  http.Handler
+	DeletePost                  http.Handler
+	ListComments                http.Handler
+	CreateComment               http.Handler
+	LikePost                    http.Handler
+	UnlikePost                  http.Handler
+	FavoritePost                http.Handler
+	UnfavoritePost              http.Handler
+	ListNotifications           http.Handler
+	UnreadNotifications         http.Handler
+	MarkNotificationRead        http.Handler
+	MarkAllNotificationsRead    http.Handler
+	PostEvents                  http.Handler
+	AIStatus                    http.Handler
+	RetryAIReplies              http.Handler
+	ListAgents                  http.Handler
+	ListAgentChatConversations  http.Handler
+	GetAgentChatConversation    http.Handler
+	StreamAgentChatMessage      http.Handler
+	DeleteAgentChatConversation http.Handler
+	RetryAgentChatMessage       http.Handler
+	ListAITasks                 http.Handler
+	ListDecisionLogs            http.Handler
+	ListPostDecisionLogs        http.Handler
+	ListPostAITasks             http.Handler
+	ListAIActivities            http.Handler
+	SearchPosts                 http.Handler
+	AdminUpdatePostStatus       http.Handler
+	AdminDashboardStats         http.Handler
+	AdminDashboardTrend         http.Handler
+	AdminDashboardBreakdown     http.Handler
+	AdminDashboardServices      http.Handler
+	AdminDashboardRecentPosts   http.Handler
+	AdminDashboardRecentTasks   http.Handler
+	AdminDashboardDecisions     http.Handler
+	AdminPermissions            http.Handler
+	AdminListUsers              http.Handler
+	AdminListPosts              http.Handler
+	AdminListComments           http.Handler
+	AdminListAgents             http.Handler
+	AdminUpdateAgent            http.Handler
+	AdminListTasks              http.Handler
+	AdminRetryTask              http.Handler
+	AdminTerminateTask          http.Handler
+	AdminMarkTaskProcessed      http.Handler
+	AdminListDecisionLogs       http.Handler
+	AdminListTags               http.Handler
+	AdminListPreferences        http.Handler
 }
 
 // New builds the api-server router.
@@ -160,17 +161,20 @@ func NewWithBusinessRoutes(deps []Dependency, internal http.Handler, business Bu
 	if business.ListAgents != nil {
 		mux.Handle("GET /api/agents", business.ListAgents)
 	}
-	if business.ListAgentChats != nil {
-		mux.Handle("GET /api/agent-chats", business.ListAgentChats)
+	if business.ListAgentChatConversations != nil {
+		mux.Handle("GET /api/ai-chat/conversations", business.ListAgentChatConversations)
 	}
-	if business.CreateAgentChat != nil {
-		mux.Handle("POST /api/agents/{agentId}/chat", business.CreateAgentChat)
+	if business.GetAgentChatConversation != nil {
+		mux.Handle("GET /api/ai-chat/conversations/{conversationId}/messages", business.GetAgentChatConversation)
 	}
-	if business.GetAgentChat != nil {
-		mux.Handle("GET /api/agents/{agentId}/chat", business.GetAgentChat)
+	if business.StreamAgentChatMessage != nil {
+		mux.Handle("POST /api/ai-chat/messages/stream", business.StreamAgentChatMessage)
 	}
-	if business.SendAgentChatMessage != nil {
-		mux.Handle("POST /api/agents/{agentId}/chat/messages", business.SendAgentChatMessage)
+	if business.DeleteAgentChatConversation != nil {
+		mux.Handle("DELETE /api/ai-chat/conversations/{conversationId}", business.DeleteAgentChatConversation)
+	}
+	if business.RetryAgentChatMessage != nil {
+		mux.Handle("POST /api/ai-chat/messages/{messageId}/retry", business.RetryAgentChatMessage)
 	}
 	if business.ListAITasks != nil {
 		mux.Handle("GET /api/ai-tasks", business.ListAITasks)
