@@ -157,6 +157,9 @@ func buildPrompt(agent Agent, messages []Message, latest string) string {
 }
 
 func orderMessages(messages []Message) []Message {
+	if messages == nil {
+		return []Message{}
+	}
 	sort.SliceStable(messages, func(i, j int) bool { return messages[i].ID < messages[j].ID })
 	return messages
 }

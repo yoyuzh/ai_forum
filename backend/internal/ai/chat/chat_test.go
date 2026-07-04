@@ -28,6 +28,18 @@ func TestServiceGetsOrCreatesSessionWithOrderedMessages(t *testing.T) {
 	}
 }
 
+func TestServiceReturnsEmptyMessagesSlice(t *testing.T) {
+	svc := NewService(newFakeStore(), &fakeModel{reply: "unused"})
+
+	got, err := svc.Get(context.Background(), 7, 1001)
+	if err != nil {
+		t.Fatalf("Get returned error: %v", err)
+	}
+	if got.Messages == nil || len(got.Messages) != 0 {
+		t.Fatalf("messages = %#v, want empty non-nil slice", got.Messages)
+	}
+}
+
 func TestServiceListsUserSessions(t *testing.T) {
 	store := newFakeStore()
 	store.sessions = []SessionSummary{
