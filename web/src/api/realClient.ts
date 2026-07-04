@@ -35,6 +35,15 @@ type BackendHotTag = {
 type BackendPost = {
   id: number;
   author_id?: number;
+  author?: {
+    username?: string;
+    nickname?: string;
+    display_name?: string;
+    avatar?: string;
+    role?: string;
+  };
+  author_username?: string;
+  author_display_name?: string;
   title: string;
   content: string;
   status?: string;
@@ -75,6 +84,21 @@ type BackendUser = {
   status?: string;
   email?: string;
 };
+
+let currentUserPromise: Promise<UserProfile | null> | null = null;
+
+async function currentUserForAuthor(): Promise<UserProfile | null> {
+  if (!getAuthToken()) {
+    currentUserPromise = null;
+    return null;
+  }
+  if (!currentUserPromise) {
+    currentUserPromise = http<BackendUser>("/api/me", { skipAuthRedirect: true })
+      .then(userFromBackend)
+      .catch(() => null);
+  }
+  return currentUserPromise;
+}
 
 type BackendNotification = {
   id: number;
@@ -218,7 +242,22 @@ function localAvatar(seed: string): string {
   return defaultUserAvatar(seed);
 }
 
-function postFromBackend(p: BackendPost): Post {
+function postFromBackend(p: BackendPost, currentUser?: UserProfile | null): Post {
+  const authorID = p.author_id ? String(p.author_id) : "";
+  const isCurrentUser = Boolean(currentUser?.uid && authorID && currentUser.uid === authorID);
+  const authorName =
+    (isCurrentUser ? currentUser?.nickname || currentUser?.username : "") ||
+    p.author?.display_name ||
+    p.author?.nickname ||
+    p.author_display_name ||
+    p.author?.username ||
+    p.author_username ||
+    (p.author_id ? `user_${p.author_id}` : "backend_user");
+  const authorAvatar =
+    (isCurrentUser ? currentUser?.avatar : undefined) ??
+    p.author?.avatar ??
+    localAvatar(String(p.author_id ?? authorName ?? p.id));
+
   return {
     id: p.id,
     title: p.title,
@@ -226,9 +265,9 @@ function postFromBackend(p: BackendPost): Post {
     category: p.category ?? "技术探讨",
     tags: p.tags ?? [],
     author: {
-      username: p.author_id ? `user_${p.author_id}` : "backend_user",
-      avatar: localAvatar(String(p.author_id ?? p.id)),
-      role: "研究员",
+      username: authorName,
+      avatar: authorAvatar,
+      role: p.author?.role ?? "研究员",
     },
     aiStatus: (p.ai_reply_count ?? 0) > 0 ? "COMPLETED" : "PENDING",
     aiResponsesCount: p.ai_reply_count ?? 0,
@@ -514,8 +553,8 @@ function decisionLogFromBackend(l: BackendDecisionLog): AIDecisionLog {
 }
 
 async function listPosts(): Promise<Post[]> {
-  const rows = await http<BackendPost[]>("/api/posts");
-  return rows.map(postFromBackend);
+  const [rows, currentUser] = await Promise.all([http<BackendPost[]>("/api/posts"), currentUserForAuthor()]);
+  return rows.map((post) => postFromBackend(post, currentUser));
 }
 
 export const realApi: ApiClient = {
@@ -531,9 +570,16 @@ export const realApi: ApiClient = {
     list: listPosts,
     listByFilter: async (tab: FeedTab, query = "", tag?: string) => {
       const normalizedTag = tag?.trim().toLowerCase();
-      const posts = query.trim()
-        ? (await http<BackendPost[]>(`/api/search/posts?q=${encodeURIComponent(query.trim())}`)).map(postFromBackend)
-        : await listPosts();
+      let posts: Post[];
+      if (query.trim()) {
+        const [rows, currentUser] = await Promise.all([
+          http<BackendPost[]>(`/api/search/posts?q=${encodeURIComponent(query.trim())}`),
+          currentUserForAuthor(),
+        ]);
+        posts = rows.map((post) => postFromBackend(post, currentUser));
+      } else {
+        posts = await listPosts();
+      }
       const sorted = [...posts].sort((a, b) => {
         if (tab === "hottest") return b.viewCount - a.viewCount;
         if (tab === "ai_most") return b.aiResponsesCount - a.aiResponsesCount;
@@ -546,13 +592,15 @@ export const realApi: ApiClient = {
         return matchesTag;
       });
     },
-    get: async (id: number) => postFromBackend(await http<BackendPost>(`/api/posts/${id}`)),
+    get: async (id: number) =>
+      postFromBackend(await http<BackendPost>(`/api/posts/${id}`), await currentUserForAuthor()),
     create: async (post) =>
       postFromBackend(
         await http<BackendPost>("/api/posts", {
           method: "POST",
           body: JSON.stringify({ title: post.title, content: post.content }),
         }),
+        await currentUserForAuthor(),
       ),
   },
 
@@ -660,6 +708,7 @@ export const realApi: ApiClient = {
         body: JSON.stringify({ username: identifier, password }),
       });
       setAuthToken(result.token);
+      currentUserPromise = null;
       const user = userFromBackend({ username: identifier });
       return { user, token: result.token };
     },
@@ -674,21 +723,27 @@ export const realApi: ApiClient = {
           }),
         }),
       );
+      currentUserPromise = null;
       return { user };
     },
-    logout: async () => setAuthToken(null),
+    logout: async () => {
+      currentUserPromise = null;
+      setAuthToken(null);
+    },
   },
 
   user: {
     getProfile: async () => userFromBackend(await http<BackendUser>("/api/me")),
     getStats: async (): Promise<UserStats> => http<UserStats>("/api/me/stats"),
-    updateProfile: async (updates: Partial<UserProfile>) =>
-      userFromBackend(
+    updateProfile: async (updates: Partial<UserProfile>) => {
+      currentUserPromise = null;
+      return userFromBackend(
         await http<BackendUser>("/api/me", {
           method: "PATCH",
           body: JSON.stringify({ nickname: updates.nickname }),
         }),
-      ),
+      );
+    },
   },
 
   notifications: {
