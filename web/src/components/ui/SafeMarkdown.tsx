@@ -20,7 +20,7 @@ export default function SafeMarkdown({ content, className }: SafeMarkdownProps) 
   });
 
   return (
-    <div className={className ?? "prose-cohere"}>
+    <div className={`${className ?? "prose-cohere"} [&_p]:text-cohere-ink`}>
       <ReactMarkdown>{cleaned}</ReactMarkdown>
     </div>
   );

@@ -21,6 +21,14 @@ axe-core SHALL report no critical violations on key web and admin screens. WCAG-
 - **WHEN** `govulncheck` and `npm audit` run
 - **THEN** no unpatched critical advisories remain (or accepted ones are documented)
 
+### Requirement: AI-call structured logs
+AI model calls SHALL emit structured worker logs with `task_id`, `task_type`, `post_id`, `ai_agent_id`, `trigger_type`, `model`, `latency_ms`, `status`, `retry_count`, and `error_message` when present. Logs SHALL NOT include prompt bodies, API keys, internal tokens, or full secrets.
+
+#### Scenario: Model call log is useful and redacted
+- **WHEN** a fake AI model call succeeds or fails
+- **THEN** the structured log contains the required operational fields
+- **AND** no prompt body, API key, internal token, or full secret appears
+
 ### Requirement: Idempotency-under-load gate
 Concurrent duplicate injection of the same `post.tagged` / `generate_ai_reply` event SHALL result in exactly one decision and one AI comment per `(post, agent, trigger_type)`, exercising both `processed_events` and the 4-column unique key.
 

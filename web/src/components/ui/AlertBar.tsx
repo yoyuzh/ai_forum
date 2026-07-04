@@ -30,7 +30,7 @@ const TONE_STYLES: Record<AlertTone, { wrap: string; icon: string; iconName: str
 };
 
 /**
- * Inline alert strip for form feedback (save success, SSO placeholder, etc.).
+ * Inline alert strip for form feedback.
  * Self-dismissing via `duration`. No global store — each page owns its own
  * instance, keeping the change surface small per web/AGENTS.md.
  */

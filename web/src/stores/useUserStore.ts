@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { setAuthToken } from "../api/auth";
+import { defaultUserAvatars } from "../assets/brand";
 import type { UserProfile } from "../api/types";
 
 interface UserStore {
@@ -6,9 +8,10 @@ interface UserStore {
    *  Carries `username`/`avatar` so existing Header/PostCard consumers stay
    *  source-compatible. */
   currentUser: UserProfile | null;
+  token: string | null;
   /** Mock auth flag — true while a local user is active. Not a real session. */
   isAuthed: boolean;
-  setCurrentUser: (user: UserProfile) => void;
+  setCurrentUser: (user: UserProfile, token?: string) => void;
   updateCurrentUser: (updates: Partial<UserProfile>) => void;
   clearAuthed: () => void;
 }
@@ -20,7 +23,7 @@ const INITIAL_USER: UserProfile = {
   username: "user_developer_1",
   nickname: "Nova_Architect",
   email: "nova@research.ai",
-  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=dev1",
+  avatar: defaultUserAvatars[1],
   bio: "致力于研究大型语言模型的涌现行为。热衷于 AI 伦理，并优化系统提示词以获得确定性输出。",
   role: "资深研究员",
   uid: "849201",
@@ -33,15 +36,24 @@ const INITIAL_USER: UserProfile = {
   },
 };
 
+const initialToken = localStorage.getItem("ai_forum_auth_token");
+
 export const useUserStore = create<UserStore>((set) => ({
   currentUser: INITIAL_USER,
+  token: initialToken,
   isAuthed: true,
-  setCurrentUser: (user) => set({ currentUser: user, isAuthed: true }),
+  setCurrentUser: (user, token) => {
+    if (token !== undefined) setAuthToken(token);
+    set({ currentUser: user, token: token ?? null, isAuthed: true });
+  },
   updateCurrentUser: (updates) =>
     set((state) =>
       state.currentUser
         ? { currentUser: { ...state.currentUser, ...updates } }
         : state,
     ),
-  clearAuthed: () => set({ currentUser: null, isAuthed: false }),
+  clearAuthed: () => {
+    setAuthToken(null);
+    set({ currentUser: null, token: null, isAuthed: false });
+  },
 }));

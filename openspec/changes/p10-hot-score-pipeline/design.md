@@ -29,12 +29,16 @@ Like/comment/view/AI-reply actions: `INCR post:{id}:<counter>`, `SADD dirty_hot_
 ### D4: Rebuild from MySQL (§6.10.6)
 On Redis flush, rebuild `hot_posts:zset` from MySQL: read recent 7-day NORMAL posts, recompute `hot_score` from MySQL snapshot counters, `ZADD`. A test asserts the rebuilt zset matches the pre-flush one (within snapshot lag).
 
+### D4a: Empty Redis still recovers on the next interaction
+If Redis is empty and `dirty_hot_posts:set` is also empty, the next like/comment/view/AI-reply still creates the counter keys, adds the post to `dirty_hot_posts:set`, updates `hot_posts:zset`, and is picked up by the next snapshot cron. This covers cold-start recovery in addition to explicit rebuild.
+
 ### D5: Concurrent-load p99 test (critique fix)
 A test issues N parallel likes against a single popular post, measures per-request latency, asserts p99 < target and that **zero** MySQL `hot_score` writes occurred on the hot path (only the cron writes). This is the concrete form of "no lock contention."
 
 ## Risks / Trade-offs
 
 - **[Risk] Redis flush loses hot board** → Mitigation: D4 rebuild from MySQL; test.
+- **[Risk] Redis starts empty and no rebuild has run yet** → Mitigation: D4a interaction repopulates counters/dirty set so the cron resumes snapshots.
 - **[Risk] 30s MySQL lag mislabels a hot post** → Mitigation: §6.10.7 — feed/detail can read Redis counters; MySQL is a periodic snapshot.
 - **[Risk] Counter drift between Redis and MySQL** → Mitigation: cron reconciles; Redis is rebuildable from MySQL counts (themselves snapshotted).
 - **[Risk] p99 test flaky in CI** → Mitigation: run against local Redis; deterministic N; assert relative not absolute latency.

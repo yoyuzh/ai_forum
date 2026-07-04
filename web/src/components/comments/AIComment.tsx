@@ -5,6 +5,8 @@ import SafeMarkdown from "../ui/SafeMarkdown";
 
 interface AICommentProps {
   comment: Comment;
+  replyTo?: string;
+  onFollowup?: (comment: Comment) => void;
 }
 
 const TRIGGER_LABEL: Record<NonNullable<Comment["triggerType"]>, string> = {
@@ -13,10 +15,14 @@ const TRIGGER_LABEL: Record<NonNullable<Comment["triggerType"]>, string> = {
   FOLLOWUP: "追问回复",
 };
 
+function scoreLabel(score?: number): string {
+  if (score === undefined) return "—";
+  return `${Math.round(score > 1 ? score : score * 100)}/100`;
+}
+
 /** Distinct green-tinted AI bubble — psychology icon avatar, willingness score,
  *  "继续追问" affordance. Matches the _2/_3 prototype AI comment block. */
-export default function AIComment({ comment }: AICommentProps) {
-  const score = comment.willingnessScore;
+export default function AIComment({ comment, replyTo, onFollowup }: AICommentProps) {
   return (
     <div className="relative flex gap-md group">
       <div className="z-10 flex-shrink-0 relative h-10 w-10 overflow-hidden rounded-ai border-2 border-cohere-surface-lowest shadow-sm">
@@ -39,8 +45,14 @@ export default function AIComment({ comment }: AICommentProps) {
       <div className="flex-1 rounded-br-ai rounded-bl-ai rounded-tr-ai border border-[#e0e5e3] bg-[#f5f7f6] p-md transition-all duration-300 ease-cohere hover:border-[#cbdad5] hover:shadow-[0_2px_12px_rgba(0,60,51,0.03)]">
         <div className="mb-md flex flex-wrap items-center gap-1">
           <span className="font-label-mono-bold text-cohere-secondary">
-            {comment.author.role ?? comment.author.username}
+            {comment.author.username}
           </span>
+          {comment.author.role && (
+            <span className="font-micro text-cohere-muted">· {comment.author.role}</span>
+          )}
+          {replyTo && (
+            <span className="font-micro text-cohere-muted">· 回复 {replyTo}</span>
+          )}
           {comment.triggerType && (
             <span className="rounded bg-cohere-secondary-container px-1 py-0.5 font-label-mono text-[10px] text-cohere-on-secondary-container">
               {TRIGGER_LABEL[comment.triggerType]}
@@ -56,10 +68,11 @@ export default function AIComment({ comment }: AICommentProps) {
         <div className="mt-lg flex items-center justify-between border-t border-[#e0e5e3] pt-md">
           <div className="flex items-center gap-1 font-label-mono text-micro text-cohere-muted">
             <MaterialIcon name="analytics" size={14} />
-            意愿分: {score !== undefined ? `${Math.round(score * 100)}/100` : "—"}
+            意愿分: {scoreLabel(comment.willingnessScore)}
           </div>
           <button
             type="button"
+            onClick={() => onFollowup?.(comment)}
             className="flex items-center gap-1 rounded-pill border border-cohere-hairline bg-cohere-surface-lowest px-md py-1 font-label-mono-bold text-micro text-cohere-ink transition-all duration-300 ease-spring hover:border-cohere-secondary hover:text-cohere-secondary hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue"
           >
             继续追问 <MaterialIcon name="arrow_forward" size={14} />

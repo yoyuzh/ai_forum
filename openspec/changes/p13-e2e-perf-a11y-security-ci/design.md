@@ -7,7 +7,9 @@ Every phase P0–P12 ships its own exit criteria, but none proves the whole syst
 **Goals:**
 - Full docker-compose stack (3 Go processes + web + admin) green under Playwright.
 - Full AI reply chain integration spec across web + admin.
+- Notification read contract and search rebuild entrypoint smoke checks.
 - Perf (CWV + real INP), a11y (axe + contrast), security (vuln + `/internal` denial), idempotency load, migration rollback.
+- AI-call structured log verification.
 - CI pipeline running all gates.
 
 **Non-Goals:**
@@ -35,16 +37,27 @@ On a populated DB: `migrate-down` to a midpoint, `migrate-up` back, assert data 
 ### D6: CI pipeline
 GitHub Actions matrix: backend (`go test`/`go vet`/`govulncheck`/migrate-fresh/P5 contract-ownership/P13 implementation-completeness/single-table-ownership check), web+admin (`npm lint`/`build`), e2e (Playwright against the compose stack). Single-table migration ownership check enforces the P1/P4/P6 ownership rule (critique risk #2).
 
+### D7: Operational contract smokes
+P13 verifies two user/operator contracts that can otherwise look "done" too early: web notification read state (list/unread/mark-read/read-all) and the documented search rebuild entrypoint. The rebuild smoke can use the same rebuild code path as P9; P13 only proves it is triggerable and documented.
+
+### D8: AI-call structured logs
+AI model calls are a cost/latency hotspot. P13 asserts the reply/followup paths log the required worker fields (`task_id`, `task_type`, `post_id`, `ai_agent_id`, `trigger_type`, `model`, `latency_ms`, `status`, `retry_count`, `error_message`) without logging prompt bodies, API keys, or internal tokens.
+
+### D9: Reports are explicit scope, not a half-feature
+Requirements mention `/admin/reports` and moderator report handling, but the phase plan has no reporting phase. P13 must fail if a route/menu is half-wired without backend behavior. Either a later OpenSpec phase owns reports, or v1 documents reports as out-of-scope.
+
 ## Risks / Trade-offs
 
 - **[Risk] 3-process compose is heavy/flaky in CI** → Mitigation: sanity spec first; retries=2; cached images.
 - **[Risk] Real INP measurement variance** → Mitigation: assert relative thresholds; run on a stable runner.
 - **[Risk] Vuln scan blocks on an unpatchable advisory** → Mitigation: document accepted advisories; fail only on fixable criticals.
 - **[Risk] Idempotency load false-positive** → Mitigation: deterministic event IDs; assert exact counts.
+- **[Risk] Operator-only recovery paths are uncallable** → Mitigation: D7 smoke checks the rebuild entrypoint instead of only unit-testing rebuild helpers.
+- **[Risk] Reports UI implies unsupported moderation workflow** → Mitigation: D9 scope guard.
 
 ## Migration Plan
 
-1. dev-up scripts → integration/sanity specs → gates (perf/a11y/security/idempotency/rollback) → CI.
+1. dev-up scripts → integration/sanity specs → contract smokes → gates (perf/a11y/security/observability/idempotency/rollback) → CI.
 2. Rollback: P13 is verification-only; removing it doesn't affect the system.
 
 ## Open Questions

@@ -38,7 +38,7 @@
     --c-on-secondary: #ffffff;
     --c-on-secondary-container: #3b6d63;
 
-    --c-muted: #93939f;
+    --c-muted: #5f5e64;
     --c-slate: #75758a;
     --c-body-muted: #616161;
 
@@ -69,6 +69,15 @@
     line-height: 1.5;
     /* Chinese body text must stay readable; never go below 16px. */
     text-rendering: optimizeLegibility;
+  }
+
+  .brand-background {
+    background-image:
+      linear-gradient(rgba(251, 249, 244, 0.72), rgba(251, 249, 244, 0.9)),
+      url("../assets/brand/background.png");
+    background-attachment: fixed;
+    background-position: center top;
+    background-size: cover;
   }
 
   /* Material Symbols base — every icon derives its optical size/weight here. */
@@ -142,7 +151,7 @@
 
   /* Quiet text-link action. */
   .btn-link {
-    @apply font-label-mono text-cohere-muted hover:text-cohere-primary transition-all duration-300 ease-cohere focus:outline-none focus-visible:underline;
+    @apply font-label-mono text-cohere-on-surface-variant hover:text-cohere-primary transition-all duration-300 ease-cohere focus:outline-none focus-visible:underline;
   }
 
   .form-control {
@@ -159,7 +168,7 @@
   }
 
   .feed-tab {
-    @apply font-label-mono text-label-mono text-cohere-muted pb-sm px-xs whitespace-nowrap transition-all duration-300 ease-cohere hover:text-cohere-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue;
+    @apply font-label-mono text-label-mono text-cohere-on-surface-variant pb-sm px-xs whitespace-nowrap transition-all duration-300 ease-cohere hover:text-cohere-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue;
   }
   .feed-tab.active {
     @apply font-label-mono-bold text-cohere-primary border-b-2 border-cohere-primary;

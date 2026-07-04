@@ -13,7 +13,11 @@ import AIDecisionLogsPage from "./pages/AIDecisionLogsPage";
 import PostsManagePage from "./pages/PostsManagePage";
 import UsersManagePage from "./pages/UsersManagePage";
 import NotFoundPage from "./pages/NotFoundPage";
-import { mockDataProvider } from "./dataProvider/mockDataProvider";
+import LoginPage from "./pages/LoginPage";
+import { CommentsPage, TagsPage, PreferencesPage } from "./pages/SimpleResourcePage";
+import { dataProvider } from "./api/dataProvider";
+import { authProvider } from "./api/authProvider";
+import { accessControlProvider } from "./providers/accessControlProvider";
 import "./styles/index.css";
 
 const queryClient = new QueryClient({
@@ -32,16 +36,16 @@ const cohereTheme = {
     colorPrimary: "#000000",
     colorInfo: "#1863dc",
     colorSuccess: "#35675d",
-    colorError: "#ba1a1a",
-    colorWarning: "#ff7759",
+    colorError: "#8f1111",
+    colorWarning: "#a83b24",
     colorBgBase: "#fbf9f4",
     colorTextBase: "#1b1c19",
     colorBorder: "#d9d9dd",
     colorBgContainer: "#ffffff",
     colorBgLayout: "#fbf9f4",
     borderRadius: 8,
-    fontFamily: "'Hanken Grotesk', Inter, ui-sans-serif, system-ui, sans-serif",
-    fontFamilyCode: "'JetBrains Mono', ui-monospace, monospace",
+    fontFamily: "'CohereText', 'Space Grotesk', 'Unica77', Inter, ui-sans-serif, system-ui, sans-serif",
+    fontFamilyCode: "'CohereMono', 'JetBrains Mono', ui-monospace, monospace",
     fontSize: 14,
   },
   components: {
@@ -69,24 +73,34 @@ export default function App() {
         <ConfigProvider theme={cohereTheme}>
           <AntdApp>
             <Refine
-              dataProvider={mockDataProvider}
+              dataProvider={dataProvider}
+              authProvider={authProvider}
+              accessControlProvider={accessControlProvider}
               routerProvider={routerProvider}
               resources={[
-                { name: "agents", list: "/agents" },
-                { name: "tasks", list: "/tasks" },
-                { name: "decisionLogs", list: "/decisions" },
+                { name: "users", list: "/users" },
                 { name: "posts", list: "/posts" },
+                { name: "comments", list: "/comments" },
+                { name: "agents", list: "/agents", edit: "/agents/:id" },
+                { name: "tasks", list: "/tasks", show: "/tasks/:id" },
+                { name: "decisionLogs", list: "/decisions" },
+                { name: "tags", list: "/tags" },
+                { name: "preferences", list: "/preferences" },
               ]}
-              options={{ syncWithLocation: true }}
+              options={{ syncWithLocation: true, disableTelemetry: true }}
             >
               <Routes>
+                <Route path="/login" element={<LoginPage />} />
                 <Route element={<AdminLayout />}>
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/users" element={<UsersManagePage />} />
                   <Route path="/posts" element={<PostsManagePage />} />
+                  <Route path="/comments" element={<CommentsPage />} />
                   <Route path="/agents" element={<AIAgentsPage />} />
                   <Route path="/tasks" element={<AITasksPage />} />
                   <Route path="/decisions" element={<AIDecisionLogsPage />} />
+                  <Route path="/tags" element={<TagsPage />} />
+                  <Route path="/preferences" element={<PreferencesPage />} />
                   <Route path="/profile" element={<Navigate to="/" replace />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>

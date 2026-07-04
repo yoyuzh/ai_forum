@@ -2,6 +2,7 @@ import { useState, FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useUserStore } from "../stores/useUserStore";
 import { api } from "../api/client";
+import { forumBackground, forumLogo } from "../assets/brand";
 import MaterialIcon from "../components/ui/MaterialIcon";
 import AlertBar from "../components/ui/AlertBar";
 
@@ -51,8 +52,8 @@ export default function LoginPage() {
 
     setSubmitting(true);
     try {
-      const { user } = await api.auth.login(identifier, password);
-      setCurrentUser(user);
+      const { user, token } = await api.auth.login(identifier, password);
+      setCurrentUser(user, token);
       navigate(redirect && redirect.startsWith("/") ? redirect : "/", { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "登录失败，请稍后重试";
@@ -63,30 +64,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-cohere-surface px-margin-mobile py-section font-body-main md:px-margin-desktop">
-      {/* Ambient mesh background — flat UI shell with media-led color, per Cohere. */}
-      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, var(--c-primary) 1px, transparent 1px), linear-gradient(to bottom, var(--c-primary) 1px, transparent 1px)",
-            backgroundSize: "40px 40px",
-          }}
-        />
-        <div className="absolute -left-40 -top-40 h-96 w-96 rounded-full bg-cohere-secondary opacity-20 mix-blend-multiply blur-[100px] motion-safe:animate-float-slow-left" />
-        <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-cohere-coral opacity-20 mix-blend-multiply blur-[100px] motion-safe:animate-float-slow-right" />
-      </div>
+    <div
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-cohere-surface px-margin-mobile py-section font-body-main md:px-margin-desktop"
+      style={{
+        backgroundImage: `linear-gradient(rgba(251, 249, 244, 0.72), rgba(251, 249, 244, 0.9)), url(${forumBackground})`,
+        backgroundPosition: "center",
+        backgroundSize: "cover",
+      }}
+    >
 
       <main className="relative z-10 mx-auto flex w-full max-w-[1200px] flex-col overflow-hidden rounded-xl border border-cohere-hairline bg-cohere-surface-lowest shadow-sm md:flex-row animate-reveal-up">
         {/* Left — brand & value proposition */}
         <div className="flex w-full flex-col justify-between rounded-t-lg border-cohere-hairline bg-cohere-surface-low p-lg md:w-1/2 md:rounded-l-lg md:border-r">
           <div className="flex h-full flex-col justify-center">
             <div className="mb-xl flex items-center gap-sm">
-              <MaterialIcon name="forum" className="font-headline-lg text-cohere-primary" />
-              <h1 className="font-headline-lg font-black tracking-[0.05em] text-cohere-primary">
-                AI Forum
-              </h1>
+              <img src={forumLogo} alt="AI Forum Research Lab" className="h-12 w-auto" />
             </div>
             <div className="space-y-md">
               <h2 className="font-headline-xl leading-tight tracking-tight text-cohere-primary">
@@ -228,39 +220,6 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* SSO divider — buttons are visual placeholders, no real backend. */}
-            <div className="relative my-xl">
-              <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                <div className="w-full border-t border-cohere-hairline" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="bg-cohere-surface-lowest px-sm font-label-mono text-cohere-muted">
-                  OR CONTINUE WITH
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-sm">
-              <button
-                type="button"
-                onClick={() => setInfo("社交登录尚未接入，请用邮箱登录或注册。")}
-                className="flex items-center justify-center gap-sm rounded-lg border border-cohere-hairline bg-cohere-surface-lowest py-sm font-label-mono text-cohere-primary transition-colors hover:bg-cohere-surface-low focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z" />
-                </svg>
-                Google
-              </button>
-              <button
-                type="button"
-                onClick={() => setInfo("社交登录尚未接入，请用邮箱登录或注册。")}
-                className="flex items-center justify-center gap-sm rounded-lg border border-cohere-hairline bg-cohere-surface-lowest py-sm font-label-mono text-cohere-primary transition-colors hover:bg-cohere-surface-low focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M12,2C6.477,2,2,6.477,2,12c0,4.418,2.865,8.166,6.839,9.489c0.5,0.092,0.682-0.217,0.682-0.482c0-0.237-0.008-0.866-0.013-1.7c-2.782,0.604-3.369-1.341-3.369-1.341c-0.454-1.155-1.11-1.462-1.11-1.462c-0.908-0.62,0.069-0.608,0.069-0.608c1.003,0.07,1.531,1.03,1.531,1.03c0.892,1.529,2.341,1.087,2.91,0.832c0.092-0.647,0.35-1.088,0.636-1.338c-2.22-0.253-4.555-1.11-4.555-4.943c0-1.091,0.39-1.984,1.029-2.683c-0.103-0.253-0.446-1.27,0.098-2.647c0,0,0.84-0.269,2.75,1.026C11.548,5.536,12.399,5.43,13.25,5.426c0.85,0.004,1.702,0.11,2.5,0.334c1.909-1.295,2.748-1.026,2.748-1.026c0.546,1.377,0.203,2.394,0.1,2.647c0.64,0.699,1.028,1.592,1.028,2.683c0,3.842-2.338,4.687-4.566,4.935c0.359,0.309,0.678,0.919,0.678,1.852c0,1.336-0.012,2.415-0.012,2.743c0,0.267,0.18,0.578,0.688,0.48C19.137,20.163,22,16.418,22,12C22,6.477,17.523,2,12,2z" />
-                </svg>
-                GitHub
-              </button>
-            </div>
           </div>
         </div>
       </main>

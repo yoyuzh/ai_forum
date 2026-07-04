@@ -68,6 +68,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "list posts", http.StatusInternalServerError)
 		return
 	}
+	if posts == nil {
+		posts = []Post{}
+	}
 	_ = json.NewEncoder(w).Encode(posts)
 }
 

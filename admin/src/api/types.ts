@@ -6,9 +6,9 @@ export type AIStatus = "PENDING" | "PROCESSING" | "COMPLETED";
 export interface AdminUser {
   id: number;
   username: string;
-  avatar: string;
+  avatar?: string;
   role: string;
-  status: "active" | "banned";
+  status: "active" | "banned" | "ACTIVE" | "BANNED";
   postCount: number;
   createdAt: string;
 }
@@ -17,8 +17,8 @@ export interface AdminPost {
   id: number;
   title: string;
   author: string;
-  category: string;
-  status: "published" | "review" | "draft";
+  category?: string;
+  status: "published" | "review" | "draft" | "NORMAL" | "HIDDEN" | "DELETED";
   viewCount: number;
   commentCount: number;
   aiResponsesCount: number;
@@ -26,64 +26,98 @@ export interface AdminPost {
 }
 
 export interface AdminAIAgent {
-  id: string; // e.g. "A001"
+  id: string | number; // e.g. "A001" or backend id 1001
   name: string;
-  displayName: string;
-  avatar: string;
-  icon: string;
-  description: string;
-  traits: string[];
-  specialties: string[];
+  displayName?: string;
+  avatar?: string;
+  icon?: string;
+  description?: string;
+  traits?: string[];
+  specialties?: string[];
   replyThreshold: number; // 0–1
   activityLevel: number; // 0–1
-  temperature: number;
-  systemPrompt: string;
+  temperature?: number;
+  systemPrompt?: string;
   allowAutoReply: boolean;
   allowMentionReply: boolean;
   allowFollowupReply: boolean;
   active: boolean;
+  fallback?: boolean;
   replyCount: number;
+  createdAt?: string;
 }
 
 export type TaskStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
 export interface AdminAITask {
-  id: string; // e.g. "tsk_928a4b"
-  agentId: string;
-  agentName: string;
-  agentInitials: string;
+  id: string | number; // e.g. "tsk_928a4b" or backend id
+  agentId?: string | number;
+  aiAgentId?: number;
+  agentName?: string;
+  aiAgentName?: string;
+  agentInitials?: string;
   triggerType: "POST_AUTO" | "MENTION" | "FOLLOWUP" | "SCHEDULED";
   triggerLabel: string;
-  targetPostId: string;
+  targetPostId?: string;
+  postId?: number;
   status: TaskStatus;
   statusLabel: string;
-  durationMs: number | null;
-  tokens: number | null;
+  durationMs?: number | null;
+  tokens?: number | null;
   retryCount: number;
-  maxRetries: number;
+  maxRetries?: number;
   errorMessage: string | null;
-  prompt: string;
-  result: string;
+  prompt?: string;
+  result?: string;
   createdAt: string;
-  timeline: { time: string; label: string; detail: string; state: "ok" | "active" | "error" }[];
+  updatedAt?: string;
+  timeline?: { time: string; label: string; detail: string; state: "ok" | "active" | "error" }[];
 }
 
-export type DecisionResult = "REPLY" | "IGNORE" | "FAILED";
+export type DecisionResult = "REPLY" | "IGNORE" | "FAILED" | "FALLBACK";
 
 export interface AdminDecisionLog {
   id: number;
-  postId: string;
-  aiAgentId: string;
+  postId: string | number;
+  commentId?: number | null;
+  aiAgentId: string | number;
   aiAgentName: string;
   triggerType: "POST_AUTO" | "MENTION" | "FOLLOWUP";
   willingnessScore: number; // 0–100
   thresholdValue: number; // 0–100
   decision: DecisionResult;
-  decisionLabel: string;
+  decisionLabel?: string;
   reason: string;
-  traits: string[];
+  fallback?: boolean;
+  traits?: string[];
   hitTags: string[];
+  taskId?: number | null;
+  commentLink?: number | null;
   createdAt: string;
+}
+
+export interface AdminTag {
+  id: number;
+  postId: number;
+  type: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface AdminPreference {
+  id: number;
+  agentId: number;
+  tagType: string;
+  tagName: string;
+  weight: number;
+  createdAt: string;
+}
+
+export interface AdminSession {
+  id?: number;
+  username: string;
+  role: string;
+  permissions: string[];
 }
 
 export interface DashboardStats {
@@ -122,4 +156,19 @@ export interface RecentPostRow {
 export interface DecisionTimelineEntry {
   time: string;
   message: string;
+}
+
+export interface RecentTaskRow {
+  id: string | number;
+  label: string;
+  icon: string;
+  status: TaskStatus;
+}
+
+export interface DecisionPostContext {
+  postId: string | number;
+  title: string;
+  body: string;
+  tags: string[];
+  timestamp: string;
 }

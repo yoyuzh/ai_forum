@@ -95,6 +95,34 @@ func TestPostTaggedConsumerEnqueuesDecideAIReply(t *testing.T) {
 	}
 }
 
+func TestSearchIndexConsumerEnqueuesSyncSearchIndex(t *testing.T) {
+	enqueuer := &recordingEnqueuer{}
+	consumer := NewSearchIndexConsumer(enqueuer)
+	body := []byte(`{"eventId":"evt-search-1","eventType":"post.created","aggregateType":"post","aggregateId":42,"occurredAt":"2026-07-02T00:00:00Z","payload":{"post_id":42,"title":"ignored"}}`)
+
+	if err := consumer.Handle(context.Background(), body); err != nil {
+		t.Fatal(err)
+	}
+
+	if enqueuer.taskType != SyncSearchIndex || enqueuer.search.EventID != "evt-search-1" || enqueuer.search.EventType != "post.created" || enqueuer.search.PostID != 42 || enqueuer.search.Title != "ignored" {
+		t.Fatalf("search task = %#v/%#v, want sync_search_index payload", enqueuer.taskType, enqueuer.search)
+	}
+}
+
+func TestNotificationConsumerEnqueuesSendNotification(t *testing.T) {
+	enqueuer := &recordingEnqueuer{}
+	consumer := NewNotificationConsumer(enqueuer)
+	body := []byte(`{"eventId":"evt-notify-1","eventType":"ai.reply.completed","aggregateType":"post","aggregateId":42,"occurredAt":"2026-07-02T00:00:00Z","payload":{"post_id":42,"comment_id":99}}`)
+
+	if err := consumer.Handle(context.Background(), body); err != nil {
+		t.Fatal(err)
+	}
+
+	if enqueuer.taskType != SendNotification || enqueuer.notify.EventID != "evt-notify-1" || enqueuer.notify.EventType != "ai.reply.completed" || enqueuer.notify.PostID != 42 || enqueuer.notify.CommentID != 99 {
+		t.Fatalf("notification task = %#v/%#v, want send_notification payload", enqueuer.taskType, enqueuer.notify)
+	}
+}
+
 func TestSQLProcessedStoreDelegatesToProcessedEventsHelpers(t *testing.T) {
 	db := &processedDBTX{}
 	store := NewSQLProcessedStore(db)
@@ -115,12 +143,19 @@ func TestSQLProcessedStoreDelegatesToProcessedEventsHelpers(t *testing.T) {
 }
 
 type recordingEnqueuer struct {
-	taskType string
-	postID   int64
-	agentID  int64
-	taskID   string
-	calls    int
-	err      error
+	taskType        string
+	postID          int64
+	parentID        *int64
+	parentCommentID int64
+	replyCommentID  int64
+	agentID         int64
+	triggerType     string
+	taskID          string
+	maxRetry        int
+	search          SyncSearchIndexPayload
+	notify          SendNotificationPayload
+	calls           int
+	err             error
 }
 
 func (e *recordingEnqueuer) Enqueue(ctx context.Context, taskType string, payload any) error {
@@ -136,7 +171,17 @@ func (e *recordingEnqueuer) Enqueue(ctx context.Context, taskType string, payloa
 		e.postID = p.PostID
 	case GenerateAIReplyPayload:
 		e.postID = p.PostID
+		e.parentID = p.ParentCommentID
 		e.agentID = p.AIAgentID
+		e.triggerType = p.TriggerType
+	case JudgeAIFollowupPayload:
+		e.postID = p.PostID
+		e.parentCommentID = p.ParentCommentID
+		e.replyCommentID = p.ReplyCommentID
+	case SyncSearchIndexPayload:
+		e.search = p
+	case SendNotificationPayload:
+		e.notify = p
 	}
 	return nil
 }
@@ -145,6 +190,9 @@ func (e *recordingEnqueuer) EnqueueWithOptions(ctx context.Context, taskType str
 	for _, opt := range opts {
 		if opt.Type() == asynq.TaskIDOpt {
 			e.taskID = opt.Value().(string)
+		}
+		if opt.Type() == asynq.MaxRetryOpt {
+			e.maxRetry = opt.Value().(int)
 		}
 	}
 	return e.Enqueue(ctx, taskType, payload)

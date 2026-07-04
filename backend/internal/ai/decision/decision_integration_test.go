@@ -161,7 +161,7 @@ type recordingSQLReplyEnqueuer struct {
 	err      error
 }
 
-func (e *recordingSQLReplyEnqueuer) EnqueueGenerateAIReply(_ context.Context, _ int64, agentID int64) error {
+func (e *recordingSQLReplyEnqueuer) EnqueueAutoGenerateAIReply(_ context.Context, _ int64, agentID int64) error {
 	if e.err != nil {
 		return e.err
 	}

@@ -30,7 +30,7 @@ export default defineConfig({
   projects: [
     {
       name: 'web',
-      testMatch: /web_t.*\.spec\.ts|integration\.spec\.ts|sanity\.spec\.ts/,
+      testMatch: /web_t.*\.spec\.ts|integration\.spec\.ts|sanity\.spec\.ts|p13_.*\.spec\.ts|p14_.*\.spec\.ts/,
       use: {
         baseURL: 'http://localhost:5173',
         ...devices['Desktop Chrome'],
@@ -38,7 +38,7 @@ export default defineConfig({
     },
     {
       name: 'admin',
-      testMatch: /admin_t.*\.spec\.ts|integration\.spec\.ts|sanity\.spec\.ts/,
+      testMatch: /admin_t.*\.spec\.ts/,
       use: {
         baseURL: 'http://localhost:5174',
         ...devices['Desktop Chrome'],

@@ -106,6 +106,22 @@ func NewPostTaggedConsumer(enqueuer Enqueuer, opts ...ConsumerOption) *PostCreat
 	return c
 }
 
+func NewSearchIndexConsumer(enqueuer Enqueuer, opts ...ConsumerOption) *PostCreatedConsumer {
+	c := &PostCreatedConsumer{enqueuer: enqueuer, taskType: SyncSearchIndex}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+func NewNotificationConsumer(enqueuer Enqueuer, opts ...ConsumerOption) *PostCreatedConsumer {
+	c := &PostCreatedConsumer{enqueuer: enqueuer, taskType: SendNotification}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
 func (c *PostCreatedConsumer) Handle(ctx context.Context, body []byte) error {
 	var env EventEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
@@ -124,11 +140,30 @@ func (c *PostCreatedConsumer) Handle(ctx context.Context, body []byte) error {
 	}
 	postID, ok := numberAsInt64(env.Payload["post_id"])
 	if !ok {
-		return fmt.Errorf("post.created missing post_id")
+		return fmt.Errorf("%s missing post_id", env.EventType)
 	}
 	payload := any(TagPostPayload{PostID: postID})
-	if c.taskType == DecideAIReply {
+	switch c.taskType {
+	case DecideAIReply:
 		payload = DecideAIReplyPayload{PostID: postID}
+	case SyncSearchIndex:
+		payload = SyncSearchIndexPayload{
+			EventID:         env.EventID,
+			EventType:       env.EventType,
+			PostID:          postID,
+			CommentID:       payloadInt64(env.Payload, "comment_id"),
+			MentionedUserID: payloadInt64(env.Payload, "mentioned_user_id"),
+			Title:           payloadString(env.Payload, "title"),
+			Status:          payloadString(env.Payload, "status"),
+		}
+	case SendNotification:
+		payload = SendNotificationPayload{
+			EventID:         env.EventID,
+			EventType:       env.EventType,
+			PostID:          postID,
+			CommentID:       payloadInt64(env.Payload, "comment_id"),
+			MentionedUserID: payloadInt64(env.Payload, "mentioned_user_id"),
+		}
 	}
 	if err := c.enqueuer.Enqueue(ctx, c.taskType, payload); err != nil {
 		return err
@@ -137,6 +172,16 @@ func (c *PostCreatedConsumer) Handle(ctx context.Context, body []byte) error {
 		return c.processed.MarkProcessed(ctx, env.EventID, c.consumerName)
 	}
 	return nil
+}
+
+func payloadInt64(payload map[string]any, key string) int64 {
+	n, _ := numberAsInt64(payload[key])
+	return n
+}
+
+func payloadString(payload map[string]any, key string) string {
+	s, _ := payload[key].(string)
+	return s
 }
 
 func numberAsInt64(v any) (int64, bool) {

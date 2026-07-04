@@ -161,19 +161,49 @@ func TestNewWorkerRegistersP6TaskHandlersWhenDependenciesExist(t *testing.T) {
 	if errors.Is(err, asynq.ErrHandlerNotFound) {
 		t.Fatalf("decide_ai_reply was not registered: %v", err)
 	}
+
+	replyPayload, err := json.Marshal(task.GenerateAIReplyPayload{PostID: 42, AIAgentID: 1001})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = p.mux.ProcessTask(context.Background(), asynq.NewTask(task.GenerateAIReply, replyPayload))
+	if err == nil {
+		t.Fatal("expected generate_ai_reply to fail against unavailable test DB")
+	}
+	if errors.Is(err, asynq.ErrHandlerNotFound) {
+		t.Fatalf("generate_ai_reply was not registered: %v", err)
+	}
+
+	followupPayload, err := json.Marshal(task.JudgeAIFollowupPayload{PostID: 42, ParentCommentID: 77, ReplyCommentID: 88})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = p.mux.ProcessTask(context.Background(), asynq.NewTask(task.JudgeAIFollowup, followupPayload))
+	if err == nil {
+		t.Fatal("expected judge_ai_followup to fail against unavailable test DB")
+	}
+	if errors.Is(err, asynq.ErrHandlerNotFound) {
+		t.Fatalf("judge_ai_followup was not registered: %v", err)
+	}
 }
 
-func TestWorkerRabbitConsumerSpecsBindP6Queues(t *testing.T) {
+func TestWorkerRabbitConsumerSpecsBindP9Queues(t *testing.T) {
 	specs := workerRabbitConsumerSpecs(&task.AsynqEnqueuer{}, nil)
 
-	if len(specs) != 2 {
-		t.Fatalf("consumer specs = %d, want 2", len(specs))
+	if len(specs) != 4 {
+		t.Fatalf("consumer specs = %d, want 4", len(specs))
 	}
 	if specs[0].queue != "q.post.tagging" || specs[0].consumerName != "worker.tag_post" {
 		t.Fatalf("first spec = %#v, want q.post.tagging worker.tag_post", specs[0])
 	}
 	if specs[1].queue != "q.ai.decision" || specs[1].consumerName != "worker.decide_ai_reply" {
 		t.Fatalf("second spec = %#v, want q.ai.decision worker.decide_ai_reply", specs[1])
+	}
+	if specs[2].queue != "q.search.index" || specs[2].consumerName != "worker.sync_search_index" {
+		t.Fatalf("third spec = %#v, want q.search.index worker.sync_search_index", specs[2])
+	}
+	if specs[3].queue != "q.notification" || specs[3].consumerName != "worker.send_notification" {
+		t.Fatalf("fourth spec = %#v, want q.notification worker.send_notification", specs[3])
 	}
 }
 
@@ -205,8 +235,35 @@ func TestAdminPostStatusRouteRequiresAdminRole(t *testing.T) {
 		deletePost: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 		}),
+		listComments: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
 		createComment: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusCreated)
+		}),
+		likePost: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		unlikePost: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		favoritePost: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		unfavoritePost: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		listNotifications: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+		unreadNotifications: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+		markNotificationRead: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		markAllNotificationsRead: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
 		}),
 		updatePostStatus: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
@@ -254,6 +311,41 @@ func TestAdminPostStatusRouteRequiresAdminRole(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("USER status = %d, want 403", rec.Code)
+	}
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		status int
+	}{
+		{http.MethodGet, "/api/posts/42/comments", http.StatusOK},
+		{http.MethodPost, "/api/posts/42/like", http.StatusNoContent},
+		{http.MethodDelete, "/api/posts/42/like", http.StatusNoContent},
+		{http.MethodPost, "/api/posts/42/favorite", http.StatusNoContent},
+		{http.MethodDelete, "/api/posts/42/favorite", http.StatusNoContent},
+		{http.MethodGet, "/api/notifications", http.StatusOK},
+		{http.MethodGet, "/api/notifications/unread-count", http.StatusOK},
+		{http.MethodPut, "/api/notifications/9/read", http.StatusNoContent},
+		{http.MethodPut, "/api/notifications/read-all", http.StatusNoContent},
+	} {
+		rec = httptest.NewRecorder()
+		req = httptest.NewRequest(tc.method, tc.path, nil)
+		h.ServeHTTP(rec, req)
+		wantAnon := http.StatusUnauthorized
+		if tc.method == http.MethodGet && strings.Contains(tc.path, "/comments") {
+			wantAnon = http.StatusOK
+		}
+		if rec.Code != wantAnon {
+			t.Fatalf("anonymous %s %s status = %d, want %d", tc.method, tc.path, rec.Code, wantAnon)
+		}
+
+		rec = httptest.NewRecorder()
+		req = httptest.NewRequest(tc.method, tc.path, nil)
+		req.Header.Set("Authorization", "Bearer "+userToken)
+		h.ServeHTTP(rec, req)
+		if rec.Code != tc.status {
+			t.Fatalf("authenticated %s %s status = %d, want %d", tc.method, tc.path, rec.Code, tc.status)
+		}
 	}
 
 	adminToken, err := tokens.Issue(auth.Subject{UserID: 2, Username: "admin", Role: "ADMIN"})

@@ -17,6 +17,7 @@ var ErrDuplicateUsername = errors.New("duplicate username")
 type User struct {
 	ID           int64  `db:"id"`
 	Username     string `db:"username"`
+	Email        string `db:"email"`
 	PasswordHash string `db:"password_hash"`
 	Role         string `db:"role"`
 	DisplayName  string `db:"display_name"`
@@ -29,10 +30,23 @@ type RegisterInput struct {
 	DisplayName string
 }
 
+type UpdateProfileInput struct {
+	DisplayName string
+}
+
+type Stats struct {
+	PostCount    int64 `json:"postCount" db:"post_count"`
+	CommentCount int64 `json:"commentCount" db:"comment_count"`
+	LikeCount    int64 `json:"likeCount" db:"like_count"`
+	AIReplyCount int64 `json:"aiReplyCount" db:"ai_reply_count"`
+}
+
 type Repository interface {
 	Create(ctx context.Context, u User) (User, error)
 	FindByID(ctx context.Context, id int64) (User, error)
 	FindByUsername(ctx context.Context, username string) (User, error)
+	UpdateProfile(ctx context.Context, id int64, in UpdateProfileInput) (User, error)
+	Stats(ctx context.Context, id int64) (Stats, error)
 }
 
 type Service struct {
@@ -68,6 +82,26 @@ func (s *Service) Profile(ctx context.Context, id int64) (User, error) {
 	}
 	u.PasswordHash = ""
 	return u, nil
+}
+
+func (s *Service) UpdateProfile(ctx context.Context, id int64, in UpdateProfileInput) (User, error) {
+	displayName := strings.TrimSpace(in.DisplayName)
+	if id <= 0 || displayName == "" || len(displayName) > 80 {
+		return User{}, fmt.Errorf("invalid profile update")
+	}
+	u, err := s.repo.UpdateProfile(ctx, id, UpdateProfileInput{DisplayName: displayName})
+	if err != nil {
+		return User{}, err
+	}
+	u.PasswordHash = ""
+	return u, nil
+}
+
+func (s *Service) Stats(ctx context.Context, id int64) (Stats, error) {
+	if id <= 0 {
+		return Stats{}, fmt.Errorf("invalid user")
+	}
+	return s.repo.Stats(ctx, id)
 }
 
 func (s *Service) Authenticate(ctx context.Context, username, password string) (auth.Subject, error) {
@@ -123,4 +157,21 @@ func (r *memoryRepository) FindByUsername(_ context.Context, username string) (U
 		return User{}, fmt.Errorf("user not found")
 	}
 	return u, nil
+}
+
+func (r *memoryRepository) UpdateProfile(_ context.Context, id int64, in UpdateProfileInput) (User, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for username, u := range r.users {
+		if u.ID == id {
+			u.DisplayName = in.DisplayName
+			r.users[username] = u
+			return u, nil
+		}
+	}
+	return User{}, fmt.Errorf("user not found")
+}
+
+func (r *memoryRepository) Stats(context.Context, int64) (Stats, error) {
+	return Stats{}, nil
 }

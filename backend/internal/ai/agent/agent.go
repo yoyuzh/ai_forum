@@ -12,6 +12,7 @@ import (
 type Agent struct {
 	ID             int64
 	Name           string
+	SystemPrompt   string
 	ReplyThreshold float64
 	ActivityLevel  float64
 	AllowAutoReply bool
@@ -40,6 +41,7 @@ func (r *SQLRepository) ListEnabledWithPreferences(ctx context.Context) ([]Agent
 	var rows []struct {
 		ID             int64   `db:"id"`
 		Name           string  `db:"name"`
+		SystemPrompt   string  `db:"system_prompt"`
 		ReplyThreshold float64 `db:"reply_threshold"`
 		ActivityLevel  float64 `db:"activity_level"`
 		AllowAutoReply bool    `db:"allow_auto_reply"`
@@ -48,7 +50,7 @@ func (r *SQLRepository) ListEnabledWithPreferences(ctx context.Context) ([]Agent
 		Fallback       bool    `db:"is_fallback"`
 	}
 	if err := r.db.SelectContext(ctx, &rows, `
-		SELECT id, name, reply_threshold, activity_level, allow_auto_reply, allow_mention, allow_followup, is_fallback
+		SELECT id, name, COALESCE(system_prompt, '') AS system_prompt, reply_threshold, activity_level, allow_auto_reply, allow_mention, allow_followup, is_fallback
 		FROM ai_agents
 		WHERE enabled = TRUE
 		ORDER BY id`); err != nil {
@@ -61,6 +63,7 @@ func (r *SQLRepository) ListEnabledWithPreferences(ctx context.Context) ([]Agent
 		agents = append(agents, Agent{
 			ID:             row.ID,
 			Name:           row.Name,
+			SystemPrompt:   row.SystemPrompt,
 			ReplyThreshold: row.ReplyThreshold,
 			ActivityLevel:  row.ActivityLevel,
 			AllowAutoReply: row.AllowAutoReply,

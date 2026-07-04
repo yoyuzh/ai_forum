@@ -62,6 +62,7 @@ internal_api:
   token: ${INTERNAL_API_TOKEN}
 ai:
   provider: openai
+  base_url: https://api.openai.com
   model: gpt-4o-mini
   api_key: ${AI_API_KEY}
   max_concurrency: 4
@@ -109,8 +110,8 @@ func TestLoad_EnvOverridesFileValue(t *testing.T) {
 	// Arrange: YAML sets mysql.password=filevalue; env sets MYSQL_PASSWORD=envvalue.
 	path := writeTestYAML(t, minimalYAML)
 	withEnv(t, map[string]string{
-		"MYSQL_PASSWORD": "envvalue",
-		"JWT_SECRET":     "jwtval",
+		"MYSQL_PASSWORD":     "envvalue",
+		"JWT_SECRET":         "jwtval",
 		"INTERNAL_API_TOKEN": "tokenval",
 	})
 
@@ -127,10 +128,11 @@ func TestLoad_DevConfigParsesAllFields(t *testing.T) {
 	// Arrange
 	path := writeTestYAML(t, minimalYAML)
 	withEnv(t, map[string]string{
-		"MYSQL_PASSWORD":      "mp",
-		"JWT_SECRET":          "js",
-		"INTERNAL_API_TOKEN":  "it",
-		"AI_API_KEY":          "ak",
+		"MYSQL_PASSWORD":     "mp",
+		"JWT_SECRET":         "js",
+		"INTERNAL_API_TOKEN": "it",
+		"AI_BASE_URL":        "https://api.iamhc.cn",
+		"AI_API_KEY":         "ak",
 	})
 
 	// Act
@@ -147,6 +149,7 @@ func TestLoad_DevConfigParsesAllFields(t *testing.T) {
 	assert.Equal(t, "http://elasticsearch:9200", cfg.Elasticsearch.Addresses[0])
 	assert.Equal(t, 168, cfg.JWT.ExpireHours)
 	assert.Equal(t, "openai", cfg.AI.Provider)
+	assert.Equal(t, "https://api.iamhc.cn", cfg.AI.BaseURL)
 	assert.Equal(t, "gpt-4o-mini", cfg.AI.Model)
 	assert.Equal(t, 4, cfg.AI.MaxConcurrency)
 	assert.Equal(t, 2, cfg.AI.RequestPerSecond)
@@ -182,8 +185,8 @@ func TestValidate_MissingRequiredSecretsFailsLoud(t *testing.T) {
 // TestValidate_ReleaseModeRequiresDBPassword asserts non-debug mode fails on empty MySQL.Password.
 func TestValidate_ReleaseModeRequiresDBPassword(t *testing.T) {
 	cfg := &Config{
-		Server:     ServerConfig{Mode: "release"},
-		JWT:        JWTConfig{Secret: "s"},
+		Server:      ServerConfig{Mode: "release"},
+		JWT:         JWTConfig{Secret: "s"},
 		InternalAPI: InternalAPIConfig{Token: "t"},
 		// MySQL.Password intentionally empty
 	}
@@ -196,8 +199,8 @@ func TestValidate_ReleaseModeRequiresDBPassword(t *testing.T) {
 // TestValidate_DebugModeRelaxesDBPassword asserts debug mode allows empty MySQL.Password.
 func TestValidate_DebugModeRelaxesDBPassword(t *testing.T) {
 	cfg := &Config{
-		Server:     ServerConfig{Mode: "debug"},
-		JWT:        JWTConfig{Secret: "s"},
+		Server:      ServerConfig{Mode: "debug"},
+		JWT:         JWTConfig{Secret: "s"},
 		InternalAPI: InternalAPIConfig{Token: "t"},
 		// MySQL.Password intentionally empty
 	}

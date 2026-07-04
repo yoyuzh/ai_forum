@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	_ "github.com/go-sql-driver/mysql" // registered for side effects
+	"github.com/jmoiron/sqlx"
 
 	"ai-forum/backend/internal/config"
 )

@@ -10,6 +10,9 @@ export default function PostTags({ tags }: PostTagsProps) {
     <div className="card-base p-lg">
       <h3 className="mb-md font-feature-title text-[18px] text-cohere-ink">帖子标签</h3>
       <div className="flex flex-wrap gap-sm">
+        {tags.length === 0 && (
+          <p className="font-micro text-cohere-on-surface-variant">暂无标签。</p>
+        )}
         {tags.map((tag, idx) => (
           <TagPill key={tag} tag={tag} variant={idx < 2 ? "coral" : "default"} />
         ))}

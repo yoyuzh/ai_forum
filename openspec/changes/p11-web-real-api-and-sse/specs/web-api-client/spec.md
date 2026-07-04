@@ -21,3 +21,11 @@ The HTTP client SHALL redirect to login on 401, surface a permission message on 
 #### Scenario: 429 surfaced
 - **WHEN** a request returns 429
 - **THEN** a rate-limit message is shown to the user
+
+### Requirement: Notification read contract
+The web API client SHALL support listing notifications, reading an unread count, marking one notification read, and marking all notifications read in both mock and real modes.
+
+#### Scenario: Unread badge updates after mark-read
+- **WHEN** a user opens notifications with unread rows
+- **AND** marks one notification read
+- **THEN** the unread badge decreases without a page reload

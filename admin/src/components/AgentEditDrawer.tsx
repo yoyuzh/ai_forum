@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Drawer, Switch, Slider, Input, Button, App as AntdApp } from "antd";
+import { Drawer, Switch, Slider, Button, App as AntdApp } from "antd";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "../api/client";
 import { AdminAIAgent } from "../api/types";
@@ -13,17 +13,16 @@ interface AgentEditDrawerProps {
 type Draft = Pick<
   AdminAIAgent,
   | "systemPrompt"
+  | "replyThreshold"
   | "activityLevel"
-  | "temperature"
   | "allowAutoReply"
   | "allowMentionReply"
   | "allowFollowupReply"
 >;
 
 const INITIAL_DRAFT: Draft = {
-  systemPrompt: "",
+  replyThreshold: 0.6,
   activityLevel: 0.5,
-  temperature: 0.6,
   allowAutoReply: false,
   allowMentionReply: false,
   allowFollowupReply: false,
@@ -44,9 +43,8 @@ export default function AgentEditDrawer({ agentId, onClose }: AgentEditDrawerPro
   useEffect(() => {
     if (agent) {
       setDraft({
-        systemPrompt: agent.systemPrompt,
+        replyThreshold: agent.replyThreshold,
         activityLevel: agent.activityLevel,
-        temperature: agent.temperature,
         allowAutoReply: agent.allowAutoReply,
         allowMentionReply: agent.allowMentionReply,
         allowFollowupReply: agent.allowFollowupReply,
@@ -92,22 +90,25 @@ export default function AgentEditDrawer({ agentId, onClose }: AgentEditDrawerPro
       styles={{ body: { padding: 24 } }}
     >
       <div className="flex flex-col gap-xl">
-        <section>
-          <div className="mb-1 flex items-center gap-1 font-label-mono-bold text-cohere-on-surface">
-            <MaterialIcon name="terminal" size={16} /> 系统提示词 (System Prompt)
-          </div>
-          <Input.TextArea
-            value={draft.systemPrompt}
-            onChange={(e) => setDraft((d) => ({ ...d, systemPrompt: e.target.value }))}
-            rows={8}
-            spellCheck={false}
-            className="font-mono"
-          />
-        </section>
-
         <section className="flex flex-col gap-lg rounded-lg border border-cohere-hairline bg-cohere-surface-lowest p-md">
           <div className="flex items-center gap-1 border-b border-cohere-hairline pb-sm font-label-mono-bold text-cohere-on-surface">
             <MaterialIcon name="tune" size={16} /> 行为阈值与活跃度
+          </div>
+
+          <div>
+            <div className="mb-1 flex items-center justify-between font-caption">
+              <span>回复意愿阈值 (Reply Threshold)</span>
+              <span className="rounded bg-cohere-surface-variant px-1 font-label-mono text-cohere-primary">
+                {draft.replyThreshold.toFixed(2)}
+              </span>
+            </div>
+            <Slider
+              min={0}
+              max={1}
+              step={0.01}
+              value={draft.replyThreshold}
+              onChange={(v) => setDraft((d) => ({ ...d, replyThreshold: v }))}
+            />
           </div>
 
           <div>
@@ -126,25 +127,6 @@ export default function AgentEditDrawer({ agentId, onClose }: AgentEditDrawerPro
             />
             <p className="font-micro text-cohere-muted">
               决定代理主动插入对话的频率，值越高越不活跃。
-            </p>
-          </div>
-
-          <div>
-            <div className="mb-1 flex items-center justify-between font-caption">
-              <span>温度值 (Temperature)</span>
-              <span className="rounded bg-cohere-surface-variant px-1 font-label-mono text-cohere-primary">
-                {draft.temperature.toFixed(2)}
-              </span>
-            </div>
-            <Slider
-              min={0}
-              max={2}
-              step={0.1}
-              value={draft.temperature}
-              onChange={(v) => setDraft((d) => ({ ...d, temperature: v }))}
-            />
-            <p className="font-micro text-cohere-muted">
-              控制生成内容的随机性，较低值更确定，较高值更发散。
             </p>
           </div>
         </section>

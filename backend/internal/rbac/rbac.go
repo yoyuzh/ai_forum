@@ -64,6 +64,8 @@ func (a *Authorizer) SeedAdminPolicies() error {
 		{"ADMIN", "post", "delete-any"},
 		{"ADMIN", "user", "ban"},
 		{"ADMIN", "ai_task", "retry"},
+		{"ADMIN", "ai_agent", "update"},
+		{"ADMIN", "decision_log", "read"},
 	} {
 		if err := a.AddPolicy(policy[0], policy[1], policy[2]); err != nil {
 			return err

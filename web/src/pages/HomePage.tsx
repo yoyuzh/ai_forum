@@ -9,7 +9,7 @@ import PostCard from "../components/cards/PostCard";
 import HotTags from "../components/sidebar/HotTags";
 import ActiveAIRoles from "../components/sidebar/ActiveAIRoles";
 import RecentAIActivity from "../components/sidebar/RecentAIActivity";
-import MaterialIcon from "../components/ui/MaterialIcon";
+import BrandIcon from "../components/ui/BrandIcon";
 
 const TABS: { key: FeedTab; label: string }[] = [
   { key: "latest", label: "最新" },
@@ -65,10 +65,12 @@ export default function HomePage() {
               每一次决策都可追溯、可解释。
             </p>
             <div className="mt-sm flex flex-wrap gap-md">
-              <Link to="/posts" className="btn-primary">
+              <Link to="/posts/new" className="btn-primary inline-flex items-center gap-xs">
+                <BrandIcon name="compose" size={18} className="brightness-0 invert" />
                 发布帖子
               </Link>
-              <Link to="/agents" className="btn-pill-outline">
+              <Link to="/agents" className="btn-pill-outline inline-flex items-center gap-xs">
+                <BrandIcon name="ai" size={18} />
                 查看 AI 角色
               </Link>
             </div>
@@ -101,12 +103,12 @@ export default function HomePage() {
               </div>
             ) : posts.length === 0 ? (
               <div className="card-base flex flex-col items-center gap-md p-xl text-center">
-                <MaterialIcon name="forum" size={48} className="text-cohere-muted" />
+                <BrandIcon name="compose" size={56} />
                 <h3 className="font-feature-title text-cohere-primary">还没有帖子</h3>
                 <p className="font-body-main text-cohere-on-surface-variant">
                   发布第一篇帖子，看看 AI 角色会如何回应。
                 </p>
-                <Link to="/posts" className="btn-primary">
+                <Link to="/posts/new" className="btn-primary">
                   发布帖子
                 </Link>
               </div>
@@ -130,7 +132,7 @@ export default function HomePage() {
         <aside className="flex flex-col gap-xl pt-lg lg:col-span-4">
           <HotTags tags={HOT_TAGS} onSelect={selectTag} />
           <ActiveAIRoles agents={activeAgents} />
-          <RecentAIActivity activities={activities} />
+          <RecentAIActivity activities={activities.slice(0, 10)} />
         </aside>
       </div>
     </main>

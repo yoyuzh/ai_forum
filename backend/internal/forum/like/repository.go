@@ -26,8 +26,7 @@ func (r *SQLRepository) Like(ctx context.Context, tx DBTX, userID, postID int64)
 	if !changed {
 		return false, nil
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE posts SET like_count = (SELECT COUNT(*) FROM likes WHERE post_id = ?) WHERE id = ?`, postID, postID)
-	return true, err
+	return true, nil
 }
 
 func (r *SQLRepository) Unlike(ctx context.Context, tx DBTX, userID, postID int64) (bool, error) {
@@ -42,8 +41,7 @@ func (r *SQLRepository) Unlike(ctx context.Context, tx DBTX, userID, postID int6
 	if !changed {
 		return false, nil
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE posts SET like_count = (SELECT COUNT(*) FROM likes WHERE post_id = ?) WHERE id = ?`, postID, postID)
-	return true, err
+	return true, nil
 }
 
 func (r *SQLRepository) Count(ctx context.Context, tx DBTX, postID int64) (int, error) {

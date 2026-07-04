@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { FeedTab } from "../api/types";
+import { useEffect } from "react";
+import { api, apiMode } from "../api/client";
+import { FeedTab, Post } from "../api/types";
+import { subscribePostEvents } from "../sse/realSource";
 import { useSSE } from "../sse/useSSE";
 
 export function usePosts(tab: FeedTab = "latest", query = "", tag?: string) {
@@ -39,6 +41,32 @@ export function usePostDetail(id: number) {
       queryClient.setQueryData(["post", id], updatedPost);
     }
   });
+
+  useSSE("ai-status.updated", (status: { postId?: number; overallStatus?: string }) => {
+    if (status.postId === id) {
+      queryClient.invalidateQueries({ queryKey: ["comments", id] });
+      queryClient.setQueryData(["post", id], (current: Post | undefined) =>
+        current
+          ? {
+              ...current,
+              aiStatus: status.overallStatus === "COMPLETED" ? "COMPLETED" : current.aiStatus,
+            }
+          : current,
+      );
+    }
+  });
+
+  useSSE("ai_reply_completed", (event: { postId?: number }) => {
+    if (event.postId === id) {
+      queryClient.invalidateQueries({ queryKey: ["comments", id] });
+      queryClient.invalidateQueries({ queryKey: ["post", id] });
+    }
+  });
+
+  useEffect(() => {
+    if (apiMode !== "real" || Number.isNaN(id)) return undefined;
+    return subscribePostEvents(id);
+  }, [id]);
 
   return useQuery({
     queryKey: ["post", id],

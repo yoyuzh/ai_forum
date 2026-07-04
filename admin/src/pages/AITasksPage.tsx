@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Table, Select, Input, Button } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { adminApi } from "../api/client";
@@ -7,8 +7,10 @@ import { AdminAITask, TaskStatus } from "../api/types";
 import MaterialIcon from "../components/MaterialIcon";
 import StatusBadge from "../components/StatusBadge";
 import TaskDetailDrawer from "../components/TaskDetailDrawer";
+import { usePermission } from "../hooks/usePermission";
 
 export default function AITasksPage() {
+  const queryClient = useQueryClient();
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["tasks"],
     queryFn: adminApi.tasks.list,
@@ -23,12 +25,15 @@ export default function AITasksPage() {
   const [triggerFilter, setTriggerFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
   const [detailId, setDetailId] = useState<string | null>(null);
+  const canRetry = usePermission("ai_task:retry");
 
   const filtered = tasks.filter((t) => {
+    const agentName = t.agentName ?? t.aiAgentName ?? "";
+    const targetPostId = t.targetPostId ?? String(t.postId ?? "");
     if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
-    if (agentFilter !== "ALL" && t.agentName !== agentFilter) return false;
+    if (agentFilter !== "ALL" && agentName !== agentFilter) return false;
     if (triggerFilter !== "ALL" && t.triggerType !== triggerFilter) return false;
-    if (search && !t.id.toLowerCase().includes(search.toLowerCase()) && !t.targetPostId.toLowerCase().includes(search.toLowerCase()))
+    if (search && !String(t.id).toLowerCase().includes(search.toLowerCase()) && !targetPostId.toLowerCase().includes(search.toLowerCase()))
       return false;
     return true;
   });
@@ -64,10 +69,10 @@ export default function AITasksPage() {
       render: (_: string, record: AdminAITask) => (
         <div className="flex items-center gap-1">
           <div className="flex h-6 w-6 items-center justify-center rounded bg-cohere-secondary-container font-label-mono-bold text-[10px] text-cohere-secondary">
-            {record.agentInitials}
+            {record.agentInitials ?? (record.agentName ?? record.aiAgentName ?? "AI").slice(0, 2)}
           </div>
           <div>
-            <div className="font-label-mono-bold text-cohere-on-surface">{record.agentName}</div>
+            <div className="font-label-mono-bold text-cohere-on-surface">{record.agentName ?? record.aiAgentName}</div>
             <div className="font-micro text-cohere-muted">{record.triggerLabel}</div>
           </div>
         </div>
@@ -104,7 +109,7 @@ export default function AITasksPage() {
       align: "right",
       render: (_: unknown, record: AdminAITask) => (
         <div className="font-label-mono text-micro text-cohere-muted">
-          <div>{record.durationMs !== null ? `${(record.durationMs / 1000).toFixed(1)}s` : "--"}</div>
+          <div>{record.durationMs !== null && record.durationMs !== undefined ? `${(record.durationMs / 1000).toFixed(1)}s` : "--"}</div>
           <div>{record.tokens !== null ? `Tokens: ${record.tokens}` : `Retry: ${record.retryCount} (Max)`}</div>
         </div>
       ),
@@ -114,7 +119,7 @@ export default function AITasksPage() {
       key: "chevron",
       width: 56,
       render: (_: unknown, record: AdminAITask) => (
-        <Button type="text" onClick={() => setDetailId(record.id)} icon={<MaterialIcon name="chevron_right" size={20} />} />
+        <Button type="text" onClick={() => setDetailId(String(record.id))} icon={<MaterialIcon name="chevron_right" size={20} />} />
       ),
     },
   ];
@@ -133,18 +138,23 @@ export default function AITasksPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1440px] px-margin-mobile py-lg md:px-margin-desktop">
+    <div className="admin-page">
       <div className="mb-xl flex flex-col items-start justify-between gap-md md:flex-row md:items-center">
         <div>
-          <h1 className="font-headline-xl font-bold tracking-tight text-cohere-ink">AI Reply Tasks</h1>
-          <p className="mt-1 font-body-large text-cohere-muted">
+          <h1 className="admin-page-heading">AI Reply Tasks</h1>
+          <p className="admin-page-subtitle">
             监控并管理自动化 AI 回复队列。
           </p>
         </div>
         <div className="flex gap-sm">
-          <Button icon={<MaterialIcon name="refresh" size={18} />}>Refresh</Button>
-          <Button type="primary" icon={<MaterialIcon name="play_arrow" size={18} />}>
-            Resume All Failed
+          <Button
+            icon={<MaterialIcon name="refresh" size={18} />}
+            onClick={() => {
+              void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+              void queryClient.invalidateQueries({ queryKey: ["taskSummary"] });
+            }}
+          >
+            Refresh
           </Button>
         </div>
       </div>
@@ -227,7 +237,7 @@ export default function AITasksPage() {
         />
       </div>
 
-      <TaskDetailDrawer taskId={detailId} onClose={() => setDetailId(null)} />
+      <TaskDetailDrawer taskId={detailId} onClose={() => setDetailId(null)} canRetry={canRetry} />
     </div>
   );
 }

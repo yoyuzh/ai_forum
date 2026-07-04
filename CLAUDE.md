@@ -23,7 +23,7 @@ Source-of-truth design docs (do not delete or move): `ai_forum_requirements_v2.m
 
 ### Web app (`web/`)
 ```bash
-cd web && npm run dev        # dev server (vite.config.ts sets port 3000)
+cd web && npm run dev        # dev server (vite.config.ts sets port 5173)
 npm run build                # tsc && vite build
 npm run lint                 # eslint, --max-warnings 0
 npm run preview

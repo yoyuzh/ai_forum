@@ -80,6 +80,43 @@ export interface AIAgent {
   active: boolean;
 }
 
+export interface AIChatMessage {
+  id: number;
+  sessionId: number;
+  role: "user" | "assistant";
+  content: string;
+  errorMessage?: string | null;
+  createdAt: string;
+}
+
+export interface AIChatSession {
+  id: number;
+  userId: number;
+  aiAgentId: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AIChat {
+  session: AIChatSession;
+  agent: AIAgent;
+  messages: AIChatMessage[];
+}
+
+export interface AIChatSendResult {
+  session: AIChatSession;
+  userMessage: AIChatMessage;
+  assistantMessage?: AIChatMessage;
+}
+
+export interface AIChatSessionSummary {
+  session: AIChatSession;
+  agent: AIAgent;
+  lastMessage: string;
+  messageCount: number;
+}
+
 export type TaskStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
 export interface AIReplyTask {
@@ -187,6 +224,7 @@ export interface UserProfile {
 
 export interface AuthResult {
   user: UserProfile;
+  token?: string;
 }
 
 /** Aggregated profile statistics computed from posts/comments, never stored. */
@@ -195,4 +233,95 @@ export interface UserStats {
   commentCount: number;
   likeCount: number;
   aiReplyCount: number;
+}
+
+export interface NotificationItem {
+  id: number;
+  type: string;
+  title: string;
+  body?: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface AIStatusSnapshot {
+  completedCount: number;
+  runningCount: number;
+  failedCount: number;
+  retryableCount: number;
+  overallStatus: "IDLE" | "RUNNING" | "COMPLETED" | "FAILED";
+}
+
+export interface ApiClient {
+  posts: {
+    list: () => Promise<Post[]>;
+    listByFilter: (tab: FeedTab, query?: string, tag?: string) => Promise<Post[]>;
+    get: (id: number) => Promise<Post>;
+    create: (
+      post: Omit<
+        Post,
+        | "id"
+        | "aiStatus"
+        | "aiResponsesCount"
+        | "aiAvatars"
+        | "createdAt"
+        | "viewCount"
+        | "commentCount"
+        | "likeCount"
+      >,
+    ) => Promise<Post>;
+  };
+  comments: {
+    list: (postId: number) => Promise<Comment[]>;
+    create: (comment: Omit<Comment, "id" | "createdAt" | "likeCount">) => Promise<Comment>;
+  };
+  likes: {
+    likePost: (postId: number) => Promise<void>;
+    unlikePost: (postId: number) => Promise<void>;
+  };
+  favorites: {
+    favoritePost: (postId: number) => Promise<void>;
+    unfavoritePost: (postId: number) => Promise<void>;
+  };
+  agents: {
+    list: () => Promise<AIAgent[]>;
+    get: (id: number) => Promise<AIAgent>;
+    update: (id: number, updates: Partial<AIAgent>) => Promise<AIAgent>;
+  };
+  chat: {
+    list: () => Promise<AIChatSessionSummary[]>;
+    get: (agentId: number) => Promise<AIChat>;
+    sendMessage: (agentId: number, content: string) => Promise<AIChatSendResult>;
+  };
+  tasks: { list: () => Promise<AIReplyTask[]> };
+  decisionLogs: {
+    list: () => Promise<AIDecisionLog[]>;
+    listForPost: (postId: number) => Promise<AIDecisionLog[]>;
+  };
+  activities: { list: () => Promise<AIActivity[]> };
+  auth: {
+    login: (identifier: string, password: string) => Promise<AuthResult>;
+    register: (input: {
+      username: string;
+      nickname: string;
+      email: string;
+      password: string;
+    }) => Promise<AuthResult>;
+    logout: () => Promise<void>;
+  };
+  user: {
+    getProfile: () => Promise<UserProfile>;
+    getStats: (username: string) => Promise<UserStats>;
+    updateProfile: (updates: Partial<UserProfile>) => Promise<UserProfile>;
+  };
+  notifications: {
+    list: () => Promise<NotificationItem[]>;
+    unreadCount: () => Promise<number>;
+    markRead: (id: number) => Promise<void>;
+    markAllRead: () => Promise<void>;
+  };
+  aiStatus: {
+    get: (postId: number) => Promise<AIStatusSnapshot>;
+    retry: (postId: number) => Promise<{ retried: number }>;
+  };
 }

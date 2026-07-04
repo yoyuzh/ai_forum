@@ -1,6 +1,6 @@
 # AI Forum v1.0 — 项目计划书 (Project Plan)
 
-> Spec-driven development plan, managed via OpenSpec. 14 phases (P0–P13), 264 tasks.
+> Spec-driven development plan, managed via OpenSpec. 15 phases (P0–P14), 303 tasks.
 > Source of truth: `ai_forum_requirements_v2.md`, `ai_forum_architecture_v1.md`, `stitch_ai_forum/design_cohere.md`, `CLAUDE.md`, and each module's `AGENTS.md`.
 
 ## How to use this plan
@@ -36,10 +36,11 @@ openspec validate "<pN-slug>"              # validate a phase
 | **P7** | `p7-generate-ai-reply-sse-bridge` | generate_ai_reply + moderation + SSE bridge | 19 | P6 | AI comment+`ai.reply.completed` in-tx; **4-col unique key** concurrent-insert test; moderation block not persisted; SSE dispatch extends P3 files |
 | **P8** | `p8-mention-and-followup` | @AI mention + followup judge | 15 | P7 | mention bypasses willingness + rate limit; followup safe-default false (per anomaly); AI≠AI; ≤3 followup/agent/post |
 | **P9** | `p9-search-sync-and-notification` | Search index sync + notification | 17 | P7 | ES reflects writes 1–3s; ES-down chaos; rebuild==incremental; owns `comment.deleted`/`ai.reply.failed`/`post.moderated` consumers |
-| **P10** | `p10-hot-score-pipeline` | Hot score pipeline | 16 | P5 | Redis hot path (no MySQL write); 30s cron snapshot; formula; **concurrent-load p99 test** |
-| **P11** | `p11-web-real-api-and-sse` | Web real API client + real SSE | 17 | **P7**, P4 | mock/real env-gated; real SSE + reconnect-no-dup + polling fallback; 401/429; DOMPurify E2E; axe-core |
+| **P10** | `p10-hot-score-pipeline` | Hot score pipeline | 17 | P5 | Redis hot path (no MySQL write); 30s cron snapshot; formula; Redis cold-start recovery; **concurrent-load p99 test** |
+| **P11** | `p11-web-real-api-and-sse` | Web real API client + real SSE | 19 | **P7**, P4 | mock/real env-gated; real SSE + reconnect-no-dup + polling fallback; notifications entry; 401/429; DOMPurify E2E; axe-core |
 | **P12** | `p12-admin-refine-decision-viz` | Admin Refine + decision-log viz | 21 | **P6**, P4 | dataProvider+authProvider+RBAC visibility; decision-log explorer (gauge/hit-tags/skip-reason); Cohere fonts; axe+WCAG-AA; RBAC denial E2E |
-| **P13** | `p13-e2e-perf-a11y-security-ci` | E2E, perf, a11y, security, CI | 21 | ALL | full AI chain integration; sanity; **real Playwright INP**; govulncheck/npm audit; `/internal` denial; concurrent idempotency; migrate down+up; CI + single-table ownership check |
+| **P13** | `p13-e2e-perf-a11y-security-ci` | E2E, perf, a11y, security, CI | 26 | ALL | full AI chain integration; notification/rebuild contract smoke; AI-call structured logs; reports scope guard; **real Playwright INP**; govulncheck/npm audit; `/internal` denial; concurrent idempotency; migrate down+up; CI + single-table ownership check |
+| **P14** | `p14-product-completion-polish` | Product completion polish | 31 | P13 | web real AI/profile data; admin live dashboard; no visible fake CRUD/SSO/reports; ES-backed search UI; real-mode E2E |
 
 ## Dependency graph
 
@@ -52,6 +53,7 @@ P0 → P1 → P2 → P3 → P4 → P5 → P6 → P7 → P8
                        └──→ P10 (needs P5)
 P6 ───────────────────────→ P12 (admin decision-log viz — needs P6)
 ALL ──────────────────────→ P13 (aggregate gate)
+P13 ──────────────────────→ P14 (product completion polish)
 ```
 
 Critical edges the critique forced:
@@ -69,6 +71,8 @@ Critical edges the critique forced:
 6. **Real INP, not Lighthouse TBT** → P13 measures via Playwright interaction traces.
 7. **Concrete goroutine-leak assertion** → P3 (`runtime.NumGoroutine` before/after).
 8. **Concrete p99 latency test** → P10 (replaces vague "no lock contention").
+9. **User-visible notification read path** → P11 client/UI + P13 contract smoke, without reopening P9 after implementation.
+10. **Operational recovery checks** → P10 cold-start Redis recovery and P13 search rebuild contract smoke.
 
 ## Hard architectural constraints enforced across phases
 
@@ -82,10 +86,10 @@ Critical edges the critique forced:
 
 ## Recommended execution order
 
-Linear: **P0 → P1 → P2 → P3 → P4 → P5 → P6 → P7 → (P8, P9, P10 in parallel) → P11 → P12 → P13.**
+Linear: **P0 → P1 → P2 → P3 → P4 → P5 → P6 → P7 → (P8, P9, P10 in parallel) → P11 → P12 → P13 → P14.**
 
-P8/P9/P10 are independent after P7/P5 and can be parallelized. P11 must follow P7. P12 must follow P6. P13 is last (aggregate).
+P8/P9/P10 are independent after P7/P5 and can be parallelized. P11 must follow P7. P12 must follow P6. P13 is the aggregate gate. P14 is a product-completion pass after the aggregate gate and must not add new processes or reopen architecture boundaries.
 
 ## Next step
 
-Start with **P0**: run `/opsx:apply` for `p0-foundation-config-logger`, or ask me to implement it. After implementation and verification, archive it (`/opsx:archive`) to promote its specs into `openspec/specs/`, then proceed to P1.
+All P0-P13 changes are currently complete. Next start **P14**: run `/opsx:apply` for `p14-product-completion-polish`, or ask me to implement it. After implementation and verification, archive it (`/opsx:archive`) to promote its specs into `openspec/specs/`.
