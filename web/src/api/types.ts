@@ -15,6 +15,13 @@ export interface Author {
   role?: string;
 }
 
+export interface AIResponder {
+  id?: number;
+  name: string;
+  avatar: string;
+  accentColor?: string;
+}
+
 export interface Post {
   id: number;
   title: string;
@@ -25,6 +32,7 @@ export interface Post {
   aiStatus: AIStatus;
   aiResponsesCount: number;
   aiAvatars: string[];
+  aiResponders?: AIResponder[];
   viewCount: number;
   commentCount: number;
   likeCount: number;
@@ -58,6 +66,7 @@ export interface AIAgent {
   name: string;
   displayName: string;
   avatar: string;
+  accentColor: string;
   icon: string; // Material Symbols name
   description: string;
   ageViewpoint: string;

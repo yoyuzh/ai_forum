@@ -76,6 +76,7 @@ type Task struct {
 type DecisionLog struct {
 	ID               int64    `json:"id" db:"id"`
 	PostID           int64    `json:"postId" db:"post_id"`
+	PostTitle        string   `json:"postTitle" db:"post_title"`
 	CommentID        *int64   `json:"commentId" db:"comment_id"`
 	AIAgentID        int64    `json:"aiAgentId" db:"ai_agent_id"`
 	AIAgentName      string   `json:"aiAgentName" db:"ai_agent_name"`
@@ -320,8 +321,8 @@ func (h *Handler) ListActivities(w http.ResponseWriter, r *http.Request) {
 			ID:           log.ID,
 			AgentName:    log.AIAgentName,
 			AgentAvatar:  "",
-			Action:       log.Decision,
-			Target:       "post",
+			Action:       activityAction(log),
+			Target:       log.PostTitle,
 			TargetID:     log.PostID,
 			RelativeTime: log.CreatedAt,
 		})
@@ -330,6 +331,16 @@ func (h *Handler) ListActivities(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, out)
+}
+
+func activityAction(log DecisionLog) string {
+	if log.CommentLink != nil || log.Decision == "REPLY" {
+		return "评论"
+	}
+	if log.TriggerType == "FOLLOWUP" {
+		return "参与讨论"
+	}
+	return "参与讨论"
 }
 
 func (h *Handler) DashboardStats(w http.ResponseWriter, r *http.Request) {
@@ -715,12 +726,13 @@ func (s *SQLStore) ListDecisionLogs(ctx context.Context) ([]DecisionLog, error) 
 		HitTags sql.NullString `db:"hit_tags"`
 	}
 	err := s.db.SelectContext(ctx, &rows, `
-		SELECT d.id, d.post_id, d.comment_id, d.ai_agent_id, a.name AS ai_agent_name, d.trigger_type,
+		SELECT d.id, d.post_id, p.title AS post_title, d.comment_id, d.ai_agent_id, a.name AS ai_agent_name, d.trigger_type,
 		       d.willingness_score, d.threshold_value, d.decision, COALESCE(d.reason, '') AS reason,
 		       a.is_fallback AS fallback, d.hit_tags, t.id AS task_id, t.comment_id AS reply_comment_id,
 		       DATE_FORMAT(d.created_at, '%Y-%m-%dT%TZ') AS created_at
 		FROM decision_logs d
 		JOIN ai_agents a ON a.id = d.ai_agent_id
+		JOIN posts p ON p.id = d.post_id
 		LEFT JOIN ai_reply_tasks t ON t.post_id = d.post_id AND t.ai_agent_id = d.ai_agent_id AND t.trigger_type = d.trigger_type
 		ORDER BY d.id DESC LIMIT 200`)
 	if err != nil {

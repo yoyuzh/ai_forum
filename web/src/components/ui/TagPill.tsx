@@ -1,12 +1,13 @@
 interface TagPillProps {
   tag: string;
   variant?: "default" | "coral";
+  accentColor?: string;
   onClick?: () => void;
 }
 
 /** Content tag pill. Default variant is the neutral surface chip; coral is the
  *  post-detail sidebar style with a coral outline. */
-export default function TagPill({ tag, variant = "default", onClick }: TagPillProps) {
+export default function TagPill({ tag, variant = "default", accentColor, onClick }: TagPillProps) {
   const base =
     "rounded px-sm py-0.5 font-caption text-caption transition-colors cursor-pointer";
   const styles =
@@ -20,6 +21,14 @@ export default function TagPill({ tag, variant = "default", onClick }: TagPillPr
       type={onClick ? "button" : undefined}
       onClick={onClick}
       className={`${base} ${styles}`}
+      style={
+        variant === "default" && accentColor
+          ? {
+              backgroundColor: `${accentColor}1A`,
+              color: accentColor,
+            }
+          : undefined
+      }
     >
       {variant === "coral" ? tag : `#${tag}`}
     </Comp>

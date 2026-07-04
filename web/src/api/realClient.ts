@@ -22,6 +22,7 @@ import type {
   HotTag,
   NotificationItem,
   Post,
+  AIResponder,
   UserProfile,
   UserStats,
 } from "./types";
@@ -49,11 +50,19 @@ type BackendPost = {
   status?: string;
   category?: string;
   tags?: string[];
+  ai_responders?: BackendAIResponder[];
+  aiResponders?: BackendAIResponder[];
   view_count?: number;
   comment_count?: number;
   like_count?: number;
   ai_reply_count?: number;
   created_at?: string;
+};
+
+type BackendAIResponder = {
+  id?: number;
+  name?: string;
+  avatar?: string;
 };
 
 type BackendComment = {
@@ -242,6 +251,22 @@ function localAvatar(seed: string): string {
   return defaultUserAvatar(seed);
 }
 
+function aiResponderFromBackend(responder: BackendAIResponder): AIResponder {
+  const id = responder.id ?? 0;
+  const profile = id ? aiAgentProfile(id) : undefined;
+  const name = profile?.displayName ?? responder.name ?? "AI";
+  return {
+    id: id || undefined,
+    name,
+    avatar: (id ? aiAgentAvatar(id) : undefined) ?? responder.avatar ?? localAvatar(name),
+    accentColor: profile?.accentColor,
+  };
+}
+
+function aiRespondersFromPost(p: BackendPost): AIResponder[] {
+  return (p.ai_responders ?? p.aiResponders ?? []).map(aiResponderFromBackend);
+}
+
 function postFromBackend(p: BackendPost, currentUser?: UserProfile | null): Post {
   const authorID = p.author_id ? String(p.author_id) : "";
   const isCurrentUser = Boolean(currentUser?.uid && authorID && currentUser.uid === authorID);
@@ -257,6 +282,7 @@ function postFromBackend(p: BackendPost, currentUser?: UserProfile | null): Post
     (isCurrentUser ? currentUser?.avatar : undefined) ??
     p.author?.avatar ??
     localAvatar(String(p.author_id ?? authorName ?? p.id));
+  const aiResponders = aiRespondersFromPost(p);
 
   return {
     id: p.id,
@@ -271,7 +297,8 @@ function postFromBackend(p: BackendPost, currentUser?: UserProfile | null): Post
     },
     aiStatus: (p.ai_reply_count ?? 0) > 0 ? "COMPLETED" : "PENDING",
     aiResponsesCount: p.ai_reply_count ?? 0,
-    aiAvatars: [],
+    aiAvatars: aiResponders.map((responder) => responder.avatar),
+    aiResponders,
     viewCount: p.view_count ?? 0,
     commentCount: p.comment_count ?? 0,
     likeCount: p.like_count ?? 0,
@@ -364,6 +391,7 @@ function agentFromBackend(a: BackendAgent): AIAgent {
     name: a.name,
     displayName,
     avatar: aiAgentAvatar(a.id) ?? backendAvatar ?? localAvatar(displayName),
+    accentColor: profile?.accentColor ?? a.accentColor ?? "#6B8AFC",
     icon: profile?.icon ?? a.icon ?? "smart_toy",
     description: profile?.description ?? a.description ?? "AI reply decision agent",
     ageViewpoint: profile?.ageViewpoint ?? a.ageViewpoint ?? "",

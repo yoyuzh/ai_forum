@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Post } from "../../api/types";
+import { AIResponder, Post } from "../../api/types";
 import { formatRelativeTime, formatCount } from "../../utils/format";
 import CategoryBadge from "../ui/CategoryBadge";
 import StatusBadge from "../ui/StatusBadge";
@@ -12,6 +12,15 @@ interface PostCardProps {
 
 /** Feed card — matches the Stitch ai_forum_5 prototype post article. */
 export default function PostCard({ post }: PostCardProps) {
+  const responders: AIResponder[] =
+    post.aiResponders && post.aiResponders.length > 0
+      ? post.aiResponders
+      : post.aiAvatars.map((avatar, idx) => ({
+          name: `AI ${idx + 1}`,
+          avatar,
+        }));
+  const tagAccent = responders[0]?.accentColor;
+
   return (
     <Link
       to={`/posts/${post.id}`}
@@ -44,7 +53,7 @@ export default function PostCard({ post }: PostCardProps) {
         </div>
 
         {post.tags.slice(0, 3).map((tag) => (
-          <TagPill key={tag} tag={tag} />
+          <TagPill key={tag} tag={tag} accentColor={tagAccent} />
         ))}
 
         <div className="flex-grow" />
@@ -59,22 +68,7 @@ export default function PostCard({ post }: PostCardProps) {
             {post.commentCount}
           </span>
 
-          {post.aiAvatars.length > 0 && (
-            <div className="flex -space-x-2">
-              {post.aiAvatars.slice(0, 3).map((av, idx) => (
-                <img
-                  key={idx}
-                  src={av}
-                  alt="AI"
-                  width={24}
-                  height={24}
-                  className="h-6 w-6 rounded-full border-2 border-cohere-surface-lowest object-cover"
-                />
-              ))}
-            </div>
-          )}
-
-          <StatusBadge status={post.aiStatus} responsesCount={post.aiResponsesCount} />
+          <StatusBadge status={post.aiStatus} responsesCount={post.aiResponsesCount} responders={responders} />
         </div>
       </div>
 

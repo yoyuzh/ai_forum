@@ -57,6 +57,9 @@ func (r *SQLRepository) List(ctx context.Context, tx DBTX) ([]Post, error) {
 	if err := r.loadTags(ctx, tx, posts); err != nil {
 		return nil, err
 	}
+	if err := r.loadAIResponders(ctx, tx, posts); err != nil {
+		return nil, err
+	}
 	return posts, nil
 }
 
@@ -74,6 +77,11 @@ func (r *SQLRepository) Get(ctx context.Context, tx DBTX, postID int64) (Post, e
 		return Post{}, err
 	}
 	p.Tags = tags
+	responders, err := r.aiRespondersForPost(ctx, tx, postID)
+	if err != nil {
+		return Post{}, err
+	}
+	p.AIResponders = responders
 	return p, nil
 }
 
@@ -125,6 +133,35 @@ func (r *SQLRepository) tagsForPost(ctx context.Context, tx DBTX, postID int64) 
 		tags = append(tags, row.Name)
 	}
 	return tags, nil
+}
+
+func (r *SQLRepository) loadAIResponders(ctx context.Context, tx DBTX, posts []Post) error {
+	for i := range posts {
+		responders, err := r.aiRespondersForPost(ctx, tx, posts[i].ID)
+		if err != nil {
+			return fmt.Errorf("load ai responders: %w", err)
+		}
+		posts[i].AIResponders = responders
+	}
+	return nil
+}
+
+func (r *SQLRepository) aiRespondersForPost(ctx context.Context, tx DBTX, postID int64) ([]AIResponder, error) {
+	var rows []AIResponder
+	if err := tx.SelectContext(ctx, &rows, `
+		SELECT c.ai_agent_id, a.name
+		FROM comments c
+		JOIN ai_agents a ON a.id = c.ai_agent_id
+		WHERE c.post_id = ?
+		  AND c.comment_type = 'AI'
+		  AND c.ai_agent_id IS NOT NULL
+		  AND c.deleted_at IS NULL
+		GROUP BY c.ai_agent_id, a.name
+		ORDER BY MIN(c.id)
+		LIMIT 3`, postID); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func LoadPostSnapshot(ctx context.Context, db SnapshotDB, postID int64) (PostSnapshot, error) {

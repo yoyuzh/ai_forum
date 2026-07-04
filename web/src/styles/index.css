@@ -73,11 +73,12 @@
 
   .brand-background {
     background-image:
-      linear-gradient(rgba(251, 249, 244, 0.72), rgba(251, 249, 244, 0.9)),
-      url("../assets/brand/background.png");
-    background-attachment: fixed;
+      radial-gradient(ellipse 920px 540px at 34% 140px, rgba(53, 103, 93, 0.045) 0%, rgba(53, 103, 93, 0.026) 38%, rgba(53, 103, 93, 0) 74%),
+      linear-gradient(rgba(251, 249, 244, 0.74), rgba(251, 249, 244, 0.94));
+    background-attachment: scroll;
     background-position: center top;
-    background-size: cover;
+    background-size: 100% 760px, 100% 100%;
+    background-repeat: no-repeat;
   }
 
   /* Material Symbols base — every icon derives its optical size/weight here. */

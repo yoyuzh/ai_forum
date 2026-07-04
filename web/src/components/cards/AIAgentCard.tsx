@@ -19,7 +19,9 @@ export default function AIAgentCard({ agent }: AIAgentCardProps) {
       <div className="flex min-w-0 flex-col gap-md p-lg pr-md">
         <div className="flex items-start justify-between gap-md">
           <div className="min-w-0">
-            <h2 className="truncate font-headline-lg-bold text-cohere-primary">{agent.displayName}</h2>
+            <h2 className="truncate font-headline-lg-bold" style={{ color: agent.accentColor }}>
+              {agent.displayName}
+            </h2>
             <p className="mt-xxs font-body-main text-cohere-muted">{viewpoint(agent)}</p>
           </div>
 
@@ -28,9 +30,9 @@ export default function AIAgentCard({ agent }: AIAgentCardProps) {
         <p className="line-clamp-3 font-body-main text-cohere-on-surface-variant">{agent.description}</p>
 
         <div className="flex flex-wrap gap-xs">
-          <Tag tone="green">{age}设定</Tag>
+          <Tag accentColor={agent.accentColor}>{age}设定</Tag>
           {traits.map((trait) => (
-            <Tag key={trait}>{trait}</Tag>
+            <Tag key={trait} accentColor={agent.accentColor}>{trait}</Tag>
           ))}
         </div>
 
@@ -65,7 +67,8 @@ export default function AIAgentCard({ agent }: AIAgentCardProps) {
             const fallback = e.currentTarget.parentElement?.querySelector(".avatar-fallback");
             if (fallback) fallback.classList.remove("hidden");
           }}
-          className="relative z-10 h-full min-h-[285px] w-full object-cover object-center transition-transform duration-500 ease-cohere [mask-image:linear-gradient(to_right,transparent_0%,black_32%,black_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_32%,black_100%)] group-hover:scale-[1.03]"
+          className="relative z-10 h-full min-h-[285px] w-full border-l-2 object-cover object-center transition-transform duration-500 ease-cohere [mask-image:linear-gradient(to_right,transparent_0%,black_32%,black_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_32%,black_100%)] group-hover:scale-[1.03]"
+          style={{ borderColor: agent.accentColor }}
         />
         <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-1/2 bg-[linear-gradient(to_right,var(--c-surface-low)_0%,rgba(245,243,238,0.86)_28%,rgba(245,243,238,0)_100%)]" />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-20 bg-[linear-gradient(to_top,var(--c-surface-low)_0%,rgba(245,243,238,0)_100%)]" />
@@ -87,14 +90,11 @@ function viewpoint(agent: AIAgent): string {
   return `${primary}视角`;
 }
 
-function Tag({ children, tone = "stone" }: { children: React.ReactNode; tone?: "green" | "stone" }) {
+function Tag({ children, accentColor }: { children: React.ReactNode; accentColor?: string }) {
   return (
     <span
-      className={`rounded-sm px-xs py-xxs font-label-mono ${
-        tone === "green"
-          ? "bg-cohere-secondary-container text-cohere-on-secondary-container"
-          : "bg-cohere-surface-highest text-cohere-on-surface"
-      }`}
+      className="rounded-sm px-xs py-xxs font-label-mono text-cohere-on-surface"
+      style={accentColor ? { backgroundColor: `${accentColor}1A` } : undefined}
     >
       {children}
     </span>
