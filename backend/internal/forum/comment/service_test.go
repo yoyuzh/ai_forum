@@ -3,6 +3,7 @@ package comment
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"ai-forum/backend/internal/outbox"
@@ -78,6 +79,14 @@ func TestServiceCreateMentionWritesMentionAndQueuesAfterCommit(t *testing.T) {
 	}
 }
 
+func TestParseMentionNamesSupportsChineseAgentNames(t *testing.T) {
+	got := parseMentionNames("请 @林理臣 和 @cohere_observer 看看")
+	want := []string{"林理臣", "cohere_observer"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("mentions = %#v, want %#v", got, want)
+	}
+}
+
 func TestServiceCreateMentionRejectsOverThreeAIs(t *testing.T) {
 	repo := &recordingRepository{id: 9, agents: map[string]MentionAgent{
 		"a1": {ID: 1, Name: "a1", Enabled: true, AllowMention: true},
@@ -144,18 +153,34 @@ func TestServiceCreateReplyToAIQueuesFollowupJudgeAfterCommit(t *testing.T) {
 	}
 }
 
-func TestServiceCreateDoesNotQueueFollowupForUserParent(t *testing.T) {
+func TestServiceCreateQueuesPostLevelFollowupJudgeForUserComment(t *testing.T) {
+	repo := &recordingRepository{id: 9}
+	queue := &recordingAfterCommitQueue{}
+	svc := NewService(repo, noopAppend, WithAfterCommit(queue.AfterCommit), WithFollowupEnqueuer(queue))
+
+	c, err := svc.Create(context.Background(), nil, CreateInput{PostID: 42, UserID: 7, Content: "new user comment"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queue.Run()
+	if len(queue.followup) != 1 || queue.followup[0].PostID != 42 || queue.followup[0].ParentCommentID != 0 || queue.followup[0].ReplyCommentID != c.ID {
+		t.Fatalf("followup = %#v, want post-level judge", queue.followup)
+	}
+}
+
+func TestServiceCreateQueuesPostLevelFollowupForUserParent(t *testing.T) {
 	parentID := int64(77)
 	repo := &recordingRepository{id: 9, parent: &Comment{ID: parentID, PostID: 42, CommentType: "USER"}}
 	queue := &recordingAfterCommitQueue{}
 	svc := NewService(repo, noopAppend, WithAfterCommit(queue.AfterCommit), WithFollowupEnqueuer(queue))
 
-	if _, err := svc.Create(context.Background(), nil, CreateInput{PostID: 42, UserID: 7, ParentCommentID: &parentID, Content: "reply"}); err != nil {
+	c, err := svc.Create(context.Background(), nil, CreateInput{PostID: 42, UserID: 7, ParentCommentID: &parentID, Content: "reply"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	queue.Run()
-	if len(queue.followup) != 0 {
-		t.Fatalf("followup = %#v, want none", queue.followup)
+	if len(queue.followup) != 1 || queue.followup[0].ParentCommentID != 0 || queue.followup[0].ReplyCommentID != c.ID {
+		t.Fatalf("followup = %#v, want post-level judge", queue.followup)
 	}
 }
 

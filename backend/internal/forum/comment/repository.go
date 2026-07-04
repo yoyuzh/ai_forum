@@ -98,11 +98,44 @@ func (r *SQLRepository) Get(ctx context.Context, tx DBTX, id int64) (Comment, er
 }
 
 func (r *SQLRepository) ListByPost(ctx context.Context, tx DBTX, postID int64) ([]Comment, error) {
-	var comments []Comment
-	err := tx.SelectContext(ctx, &comments, `
-		SELECT id, post_id, COALESCE(user_id, 0) AS user_id, parent_comment_id, comment_type, ai_agent_id, content
-		FROM comments
-		WHERE post_id = ? AND deleted_at IS NULL
-		ORDER BY id ASC`, postID)
-	return comments, err
+	var rows []struct {
+		Comment
+		UserDisplayName sql.NullString `db:"user_display_name"`
+		UserUsername    sql.NullString `db:"user_username"`
+		AIAgentName     sql.NullString `db:"ai_agent_name"`
+	}
+	err := tx.SelectContext(ctx, &rows, `
+		SELECT c.id, c.post_id, COALESCE(c.user_id, 0) AS user_id, c.parent_comment_id,
+		       c.comment_type, c.ai_agent_id, COALESCE(c.trigger_type, '') AS trigger_type, c.content,
+		       u.display_name AS user_display_name, u.username AS user_username, a.name AS ai_agent_name
+		FROM comments c
+		LEFT JOIN users u ON u.id = c.user_id
+		LEFT JOIN ai_agents a ON a.id = c.ai_agent_id
+		WHERE c.post_id = ? AND c.deleted_at IS NULL
+		ORDER BY c.id ASC`, postID)
+	if err != nil {
+		return nil, err
+	}
+	comments := make([]Comment, 0, len(rows))
+	for _, row := range rows {
+		c := row.Comment
+		switch c.CommentType {
+		case "AI":
+			if row.AIAgentName.Valid {
+				c.Author = &Author{Username: row.AIAgentName.String, IsAI: true}
+			}
+		default:
+			name := ""
+			if row.UserDisplayName.Valid && row.UserDisplayName.String != "" {
+				name = row.UserDisplayName.String
+			} else if row.UserUsername.Valid {
+				name = row.UserUsername.String
+			}
+			if name != "" {
+				c.Author = &Author{Username: name, IsAI: false}
+			}
+		}
+		comments = append(comments, c)
+	}
+	return comments, nil
 }

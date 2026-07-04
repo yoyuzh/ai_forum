@@ -1,6 +1,13 @@
 import type { DataProvider } from "@refinedev/core";
 import { adminApi } from "./client";
 
+class ReadOnlyResourceError extends Error {
+  constructor(resource: string) {
+    super(`${resource} is read-only in real mode`);
+    this.name = "ReadOnlyResourceError";
+  }
+}
+
 const listByResource: Record<string, () => Promise<unknown[]>> = {
   users: adminApi.users.list,
   posts: adminApi.posts.list,
@@ -41,13 +48,13 @@ const provider: Record<string, any> = {
   },
   update: async ({ resource, id, variables }: any) => {
     if (resource === "agents") return { data: await adminApi.agents.update(id, variables as Record<string, unknown>) };
-    throw new Error(`update not implemented for ${resource}`);
+    throw new ReadOnlyResourceError(resource);
   },
-  create: async () => {
-    throw new Error("create not implemented");
+  create: async ({ resource }: any) => {
+    throw new ReadOnlyResourceError(resource);
   },
-  deleteOne: async () => {
-    throw new Error("deleteOne not implemented");
+  deleteOne: async ({ resource }: any) => {
+    throw new ReadOnlyResourceError(resource);
   },
   getMany: async () => ({ data: [] }),
   updateMany: async () => ({ data: [] }),

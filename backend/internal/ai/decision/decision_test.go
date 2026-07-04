@@ -3,7 +3,10 @@ package decision
 import (
 	"context"
 	"math"
+	"strings"
 	"testing"
+
+	"ai-forum/backend/internal/ai/modelclient"
 )
 
 func TestWillingnessScoreMatchesHandComputedFixture(t *testing.T) {
@@ -59,31 +62,38 @@ func TestWillingnessScoreCoefficients(t *testing.T) {
 	}
 }
 
-func TestSelectRepliesFallsBackWhenAllScoresLow(t *testing.T) {
+func TestSelectRepliesPicksTopScoresWhenAllBelowThreshold(t *testing.T) {
 	agents := []AgentScore{
 		{AgentID: 1, Score: 0.2, Threshold: 0.6},
 		{AgentID: 2, Score: 0.3, Threshold: 0.6},
 		{AgentID: 3, Score: 0.1, Threshold: 0.6, Fallback: true},
+		{AgentID: 4, Score: 0.4, Threshold: 0.6},
 	}
 
 	selected := SelectReplies(agents)
 
-	if len(selected) != 1 || selected[0].AgentID != 3 || selected[0].Decision != DecisionFallback {
-		t.Fatalf("selected = %#v, want fallback agent 3", selected)
+	if len(selected) != 3 || selected[0].AgentID != 4 || selected[1].AgentID != 2 || selected[2].AgentID != 1 {
+		t.Fatalf("selected = %#v, want top 3 scores [4, 2, 1]", selected)
+	}
+	for _, agent := range selected {
+		if agent.Decision != DecisionReply {
+			t.Fatalf("selected = %#v, want all REPLY", selected)
+		}
 	}
 }
 
-func TestSelectRepliesIncludesAllOverThreshold(t *testing.T) {
+func TestSelectRepliesPicksTopThreeScores(t *testing.T) {
 	agents := []AgentScore{
-		{AgentID: 1, Score: 0.7, Threshold: 0.6},
-		{AgentID: 2, Score: 0.65, Threshold: 0.6},
+		{AgentID: 1, Score: 0.65, Threshold: 0.6},
+		{AgentID: 2, Score: 0.9, Threshold: 0.6},
 		{AgentID: 3, Score: 0.2, Threshold: 0.6, Fallback: true},
+		{AgentID: 4, Score: 0.8, Threshold: 0.6},
 	}
 
 	selected := SelectReplies(agents)
 
-	if len(selected) != 2 || selected[0].Decision != DecisionReply || selected[1].Decision != DecisionReply {
-		t.Fatalf("selected = %#v, want two replies", selected)
+	if len(selected) != 3 || selected[0].AgentID != 2 || selected[1].AgentID != 4 || selected[2].AgentID != 1 {
+		t.Fatalf("selected = %#v, want top 3 [2, 4, 1]", selected)
 	}
 }
 
@@ -104,8 +114,85 @@ func TestHandlerWritesLogsAndEnqueuesSelectedReplies(t *testing.T) {
 	if len(logs.logs) != 2 {
 		t.Fatalf("decision logs = %d, want 2", len(logs.logs))
 	}
-	if len(enqueuer.agentIDs) != 1 || enqueuer.agentIDs[0] != 1 {
-		t.Fatalf("enqueued agents = %#v, want [1]", enqueuer.agentIDs)
+	if len(enqueuer.agentIDs) != 2 || enqueuer.agentIDs[0] != 1 || enqueuer.agentIDs[1] != 2 {
+		t.Fatalf("enqueued agents = %#v, want [1, 2]", enqueuer.agentIDs)
+	}
+}
+
+func TestHandlerUsesModelWillingnessScores(t *testing.T) {
+	agents := &recordingAgentReader{agents: []Agent{
+		{ID: 1, Name: "local", Persona: "本地高分", ReplyThreshold: 0.6, ActivityLevel: 0.5, AllowAutoReply: true, Preferences: []Preference{{TagType: "topic", TagName: "ai", Weight: 1}}},
+		{ID: 2, Name: "model", Persona: "模型高分", ReplyThreshold: 0.6, ActivityLevel: 0.5, AllowAutoReply: true, Preferences: []Preference{{TagType: "topic", TagName: "other", Weight: 0.1}}},
+	}}
+	tags := &recordingTagReader{tags: []PostTag{{Type: "topic", Name: "ai"}}}
+	logs := &recordingDecisionLogger{}
+	enqueuer := &recordingReplyEnqueuer{}
+	scorer := recordingWillingnessScorer{scores: map[int64]float64{1: 0.2, 2: 0.95}}
+	handler := NewHandler(agents, tags, logs, enqueuer)
+	handler.SetWillingnessScorer(scorer)
+
+	if err := handler.HandleDecideAIReply(context.Background(), 42); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(enqueuer.agentIDs) != 2 || enqueuer.agentIDs[0] != 2 || enqueuer.agentIDs[1] != 1 {
+		t.Fatalf("enqueued agents = %#v, want [2, 1]", enqueuer.agentIDs)
+	}
+	for _, log := range logs.logs {
+		if log.AgentID == 2 && math.Abs(log.WillingnessScore-0.95) > 0.0001 {
+			t.Fatalf("model score was not logged: %#v", log)
+		}
+	}
+}
+
+func TestModelWillingnessScorerSendsPersonaAndParsesScore(t *testing.T) {
+	client := &recordingModelClient{out: "```json\n{\"score\":0.82}\n```"}
+	scorer := NewModelWillingnessScorer(client)
+
+	score, err := scorer.ScoreWillingness(context.Background(), WillingnessInput{
+		PostID:        42,
+		Agent:         Agent{ID: 1001, Name: "林理臣", Persona: "你是林理臣，冷静分析。\n更多规则", ReplyThreshold: 0.58},
+		Tags:          []PostTag{{Type: "topic", Name: "职业选择"}},
+		FallbackScore: 0.5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if math.Abs(score-0.82) > 0.0001 {
+		t.Fatalf("score = %.2f, want 0.82", score)
+	}
+	for _, want := range []string{"满分是1.00", "回复阈值是0.58", "id=1001 name=林理臣 persona=你是林理臣，冷静分析。", "topic=职业选择", "本地公式参考分：0.5000"} {
+		if !strings.Contains(client.in.Prompt, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, client.in.Prompt)
+		}
+	}
+}
+
+func TestHandlerSkipsRepliesForHighRiskTag(t *testing.T) {
+	agents := &recordingAgentReader{agents: []Agent{
+		{ID: 1, ReplyThreshold: 0.1, ActivityLevel: 1, AllowAutoReply: true, Preferences: []Preference{{TagType: "risk", TagName: "高风险", Weight: 1}}},
+		{ID: 2, ReplyThreshold: 0.1, ActivityLevel: 1, AllowAutoReply: true, Fallback: true},
+	}}
+	tags := &recordingTagReader{tags: []PostTag{{Type: "risk", Name: "高风险"}}}
+	logs := &recordingDecisionLogger{}
+	enqueuer := &recordingReplyEnqueuer{}
+	handler := NewHandler(agents, tags, logs, enqueuer)
+
+	if err := handler.HandleDecideAIReply(context.Background(), 42); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(enqueuer.agentIDs) != 0 {
+		t.Fatalf("enqueued agents = %#v, want none", enqueuer.agentIDs)
+	}
+	if len(logs.logs) != 2 {
+		t.Fatalf("decision logs = %d, want 2", len(logs.logs))
+	}
+	for _, log := range logs.logs {
+		if log.Decision != DecisionIgnore || log.Reason != "high risk tag" {
+			t.Fatalf("log = %#v, want high risk ignore", log)
+		}
 	}
 }
 
@@ -141,4 +228,22 @@ type recordingReplyEnqueuer struct {
 func (e *recordingReplyEnqueuer) EnqueueAutoGenerateAIReply(_ context.Context, postID, agentID int64) error {
 	e.agentIDs = append(e.agentIDs, agentID)
 	return nil
+}
+
+type recordingWillingnessScorer struct {
+	scores map[int64]float64
+}
+
+func (s recordingWillingnessScorer) ScoreWillingness(_ context.Context, in WillingnessInput) (float64, error) {
+	return s.scores[in.Agent.ID], nil
+}
+
+type recordingModelClient struct {
+	in  modelclient.Request
+	out string
+}
+
+func (c *recordingModelClient) Generate(_ context.Context, in modelclient.Request) (string, error) {
+	c.in = in
+	return c.out, nil
 }

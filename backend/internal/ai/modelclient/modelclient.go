@@ -15,6 +15,9 @@ import (
 
 type Request struct {
 	Prompt        string
+	SystemPrompt  string
+	MaxTokens     int
+	Temperature   *float64
 	TaskID        string
 	TaskType      string
 	PostID        int64
@@ -70,6 +73,7 @@ func (c *ObservedClient) Generate(ctx context.Context, in Request) (string, erro
 
 type PromptInput struct {
 	AgentName     string `db:"agent_name"`
+	SystemPrompt  string `db:"system_prompt"`
 	PostTitle     string `db:"post_title"`
 	PostContent   string `db:"post_content"`
 	ParentContent string `db:"parent_content"`
@@ -77,9 +81,14 @@ type PromptInput struct {
 
 func BuildPrompt(in PromptInput) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "You are %s. Reply as a concise forum participant.\n\nPost: %s\n%s", in.AgentName, in.PostTitle, in.PostContent)
+	if strings.TrimSpace(in.SystemPrompt) != "" {
+		b.WriteString(in.SystemPrompt)
+	} else {
+		fmt.Fprintf(&b, "You are %s. Reply as a concise forum participant.", in.AgentName)
+	}
+	fmt.Fprintf(&b, "\n\n帖子标题：%s\n帖子正文：%s", in.PostTitle, in.PostContent)
 	if strings.TrimSpace(in.ParentContent) != "" {
-		fmt.Fprintf(&b, "\n\nParent comment: %s", in.ParentContent)
+		fmt.Fprintf(&b, "\n\n父评论：%s", in.ParentContent)
 	}
 	return b.String()
 }
@@ -104,13 +113,19 @@ func NewOpenAICompatibleClient(baseURL, apiKey, model string, httpClient *http.C
 }
 
 func (c *OpenAICompatibleClient) Generate(ctx context.Context, in Request) (string, error) {
-	body, err := json.Marshal(map[string]any{
-		"model": c.model,
-		"messages": []map[string]string{{
-			"role":    "user",
-			"content": in.Prompt,
-		}},
-	})
+	messages := []map[string]string{}
+	if strings.TrimSpace(in.SystemPrompt) != "" {
+		messages = append(messages, map[string]string{"role": "system", "content": in.SystemPrompt})
+	}
+	messages = append(messages, map[string]string{"role": "user", "content": in.Prompt})
+	payload := map[string]any{"model": c.model, "messages": messages}
+	if in.MaxTokens > 0 {
+		payload["max_tokens"] = in.MaxTokens
+	}
+	if in.Temperature != nil {
+		payload["temperature"] = *in.Temperature
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}

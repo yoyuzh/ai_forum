@@ -1,3 +1,5 @@
+import { forumLogo } from "../../assets/brand";
+
 const FOOTER_LINKS = [
   { label: "服务条款", href: "#" },
   { label: "隐私政策", href: "#" },
@@ -9,8 +11,8 @@ export default function Footer() {
   return (
     <footer className="mt-auto w-full border-t border-cohere-hairline bg-cohere-surface py-section">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-lg px-margin-mobile px-margin-desktop md:flex-row md:px-margin-desktop">
-        <div className="flex items-baseline gap-md">
-          <span className="font-headline-lg text-cohere-primary">AI Forum</span>
+        <div className="flex items-center gap-md">
+          <img src={forumLogo} alt="AI Forum Research Lab" className="h-8 w-auto" />
           <span className="font-micro text-cohere-on-surface-variant">© 2024 AI Forum Research Lab</span>
         </div>
         <div className="flex flex-wrap justify-center gap-md">

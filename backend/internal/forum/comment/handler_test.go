@@ -69,7 +69,14 @@ func TestHandlerCreateMapsMentionRateLimitTo429(t *testing.T) {
 
 func TestHandlerListUsesPostID(t *testing.T) {
 	svc := &recordingCommentService{
-		listed: []Comment{{ID: 8, PostID: 42, UserID: 7, Content: "hello", CommentType: "USER"}},
+		listed: []Comment{{
+			ID:          8,
+			PostID:      42,
+			UserID:      7,
+			Content:     "hello",
+			CommentType: "USER",
+			Author:      &Author{Username: "yoyuzh", IsAI: false},
+		}},
 	}
 	h := NewHandler(svc, func(ctx context.Context, fn func(DBTX) error) error { return fn(nil) })
 	req := httptest.NewRequest(http.MethodGet, "/api/posts/42/comments", nil)
@@ -86,6 +93,9 @@ func TestHandlerListUsesPostID(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"id":8`) {
 		t.Fatalf("body = %q, want listed comment", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"username":"yoyuzh"`) {
+		t.Fatalf("body = %q, want author nickname", rec.Body.String())
 	}
 }
 

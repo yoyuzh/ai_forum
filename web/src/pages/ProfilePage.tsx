@@ -3,20 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useUserStore } from "../stores/useUserStore";
 import { api } from "../api/client";
+import { defaultUserAvatars } from "../assets/brand";
 import type { UserPreferences } from "../api/types";
 import MaterialIcon from "../components/ui/MaterialIcon";
 import AlertBar from "../components/ui/AlertBar";
 import SafeMarkdown from "../components/ui/SafeMarkdown";
 
 const BIO_MAX = 300;
-const PRESET_AVATARS = [
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=dev1",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=research",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=nova",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=forum",
-  "https://api.dicebear.com/7.x/bottts/svg?seed=ArchTechLead",
-  "https://api.dicebear.com/7.x/bottts/svg?seed=Devil",
-];
+const PRESET_AVATARS = defaultUserAvatars;
 
 interface ProfileForm {
   nickname: string;

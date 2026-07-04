@@ -61,6 +61,49 @@ func TestHandlerDefaultsFalseOnAnomalies(t *testing.T) {
 	}
 }
 
+func TestHandlerSelectsAIsForPostLevelUserComment(t *testing.T) {
+	repo := &recordingRepository{
+		post:       Post{ID: 42, Title: "title", Content: "body"},
+		reply:      Comment{ID: 88, PostID: 42, CommentType: "USER", UserID: 7, Content: "anyone?"},
+		candidates: []Candidate{{AIAgentID: 1001, Name: "a", Content: "first"}, {AIAgentID: 1002, Name: "b", Content: "second"}},
+	}
+	enqueuer := &recordingGenerateEnqueuer{}
+	h := NewHandler(repo, model{out: `{"agent_ids":[1002,9999]}`}, enqueuer)
+
+	if err := h.HandleJudgeAIFollowup(context.Background(), task.JudgeAIFollowupPayload{PostID: 42, ReplyCommentID: 88}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(enqueuer.payloads) != 1 {
+		t.Fatalf("payloads = %#v, want one selected candidate", enqueuer.payloads)
+	}
+	got := enqueuer.payloads[0]
+	if got.PostID != 42 || got.ParentCommentID == nil || *got.ParentCommentID != 88 || got.AIAgentID != 1002 || got.TriggerType != "FOLLOWUP" {
+		t.Fatalf("payload = %#v", got)
+	}
+}
+
+func TestHandlerDoesNotEnqueueWhenPostLevelModelReturnsEmpty(t *testing.T) {
+	for _, out := range []string{`{"agent_ids":[]}`, `{"agent_id":null}`} {
+		t.Run(out, func(t *testing.T) {
+			repo := &recordingRepository{
+				post:       Post{ID: 42},
+				reply:      Comment{ID: 88, PostID: 42, CommentType: "USER", UserID: 7},
+				candidates: []Candidate{{AIAgentID: 1001, Name: "a", Content: "first"}},
+			}
+			enqueuer := &recordingGenerateEnqueuer{}
+			h := NewHandler(repo, model{out: out}, enqueuer)
+
+			if err := h.HandleJudgeAIFollowup(context.Background(), task.JudgeAIFollowupPayload{PostID: 42, ReplyCommentID: 88}); err != nil {
+				t.Fatal(err)
+			}
+			if len(enqueuer.payloads) != 0 {
+				t.Fatalf("payloads = %#v, want none", enqueuer.payloads)
+			}
+		})
+	}
+}
+
 func TestHandlerDoesNotEnqueueForAIReplyOrFollowupCap(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -95,6 +138,7 @@ type recordingRepository struct {
 	post          Post
 	parent        Comment
 	reply         Comment
+	candidates    []Candidate
 	followupCount int
 }
 
@@ -118,6 +162,10 @@ func (r *recordingRepository) LoadComment(_ context.Context, id int64) (Comment,
 
 func (r *recordingRepository) CountFollowups(_ context.Context, postID, agentID int64) (int, error) {
 	return r.followupCount, nil
+}
+
+func (r *recordingRepository) ListPostAICandidates(context.Context, int64) ([]Candidate, error) {
+	return r.candidates, nil
 }
 
 type model struct {

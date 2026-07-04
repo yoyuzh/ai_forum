@@ -12,6 +12,11 @@ import {
   AuthResult,
   ApiClient,
   NotificationItem,
+  AIChat,
+  AIChatMessage,
+  AIChatSendResult,
+  AIChatSession,
+  AIChatSessionSummary,
 } from "./types";
 import { runBackgroundAISimulation } from "../sse/simulator";
 
@@ -34,6 +39,66 @@ let notifications: NotificationItem[] = [
     createdAt: new Date().toISOString(),
   },
 ];
+
+const chatSessions = new Map<number, AIChatSession>();
+const chatMessages = new Map<number, AIChatMessage[]>();
+let nextChatSessionId = 1;
+let nextChatMessageId = 1;
+
+function getMockChat(agentId: number): AIChat {
+  const agent = db.getAgent(agentId);
+  if (!agent) throw new Error("Agent not found");
+  let session = chatSessions.get(agentId);
+  if (!session) {
+    const now = new Date().toISOString();
+    session = {
+      id: nextChatSessionId++,
+      userId: 1,
+      aiAgentId: agentId,
+      title: agent.displayName,
+      createdAt: now,
+      updatedAt: now,
+    };
+    chatSessions.set(agentId, session);
+    chatMessages.set(session.id, []);
+  }
+  return { session, agent, messages: chatMessages.get(session.id) ?? [] };
+}
+
+function listMockChats(): AIChatSessionSummary[] {
+  return Array.from(chatSessions.values())
+    .map((session) => {
+      const agent = db.getAgent(session.aiAgentId);
+      if (!agent) return null;
+      const messages = chatMessages.get(session.id) ?? [];
+      return {
+        session,
+        agent,
+        lastMessage: messages.at(-1)?.content ?? "",
+        messageCount: messages.length,
+      };
+    })
+    .filter((item): item is AIChatSessionSummary => Boolean(item))
+    .sort((a, b) => +new Date(b.session.updatedAt) - +new Date(a.session.updatedAt));
+}
+
+function createMockChatMessage(sessionId: number, role: AIChatMessage["role"], content: string): AIChatMessage {
+  const message = {
+    id: nextChatMessageId++,
+    sessionId,
+    role,
+    content,
+    createdAt: new Date().toISOString(),
+  };
+  chatMessages.set(sessionId, [...(chatMessages.get(sessionId) ?? []), message]);
+  for (const [agentId, session] of chatSessions) {
+    if (session.id === sessionId) {
+      chatSessions.set(agentId, { ...session, updatedAt: message.createdAt });
+      break;
+    }
+  }
+  return message;
+}
 
 export const mockApi: ApiClient = {
   posts: {
@@ -123,6 +188,23 @@ export const mockApi: ApiClient = {
 
     update: async (id: number, updates: Partial<AIAgent>): Promise<AIAgent> =>
       delay(db.updateAgent(id, updates)),
+  },
+
+  chat: {
+    list: async (): Promise<AIChatSessionSummary[]> => delay(listMockChats()),
+    get: async (agentId: number): Promise<AIChat> => delay(getMockChat(agentId)),
+    sendMessage: async (agentId: number, content: string): Promise<AIChatSendResult> => {
+      const chat = getMockChat(agentId);
+      const trimmed = content.trim();
+      if (!trimmed) throw new Error("请输入消息内容");
+      const userMessage = createMockChatMessage(chat.session.id, "user", trimmed);
+      const assistantMessage = createMockChatMessage(
+        chat.session.id,
+        "assistant",
+        `${chat.agent.displayName}：我先按自己的视角回应你。${trimmed.length > 24 ? trimmed.slice(0, 24) + "…" : trimmed}`,
+      );
+      return delay({ session: chat.session, userMessage, assistantMessage });
+    },
   },
 
   tasks: {
@@ -227,6 +309,8 @@ export const mockApi: ApiClient = {
       return delay({
         completedCount: post?.aiResponsesCount ?? 0,
         runningCount: post?.aiStatus === "PROCESSING" ? 1 : 0,
+        failedCount: 0,
+        retryableCount: 0,
         overallStatus:
           post?.aiStatus === "PROCESSING"
             ? "RUNNING"
@@ -235,5 +319,6 @@ export const mockApi: ApiClient = {
               : "IDLE",
       });
     },
+    retry: async () => delay({ retried: 0 }),
   },
 };

@@ -10,6 +10,9 @@ import {
   UserStats,
   UserPreferences,
 } from "./types";
+import { aiAgentAvatar } from "./agentAvatars";
+import { aiAgentProfile } from "./agentProfiles";
+import { defaultUserAvatar } from "../assets/brand";
 
 // Stable timestamps relative to "now" so the feed always looks fresh.
 // We avoid Date.now() inside module-scope constants where possible by
@@ -18,115 +21,30 @@ const NOW = Date.now();
 const minutes = (m: number) => new Date(NOW - m * 60_000).toISOString();
 const hours = (h: number) => new Date(NOW - h * 3_600_000).toISOString();
 
-export const DEFAULT_AGENTS: AIAgent[] = [
-  {
-    id: 1,
-    name: "ArchTechLead",
-    displayName: "架构师 · Ada",
-    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=ArchTechLead",
-    icon: "architecture",
-    description: "资深系统架构师，擅长分布式设计与性能优化。",
-    ageViewpoint: "主张严格解耦的服务设计与覆盖完整的集成测试。",
-    personality: "务实、严谨、分析型，但具有建设性。",
-    valueOrientation: "稳定性、低技术债、防御式编码。",
-    speakingStyle: "直接、专业，使用精确的技术术语（解耦边界、高内聚）。",
-    systemPrompt:
-      "你是架构师 Ada。分析技术设计，指出潜在 bug、扩展性问题与边界违规。",
-    stylePrompt:
-      "以直接的结构化总结开始，用 Markdown 表格和列表组织批评，避免套话。",
-    traits: ["务实", "严谨", "分析型"],
-    specialties: ["系统架构", "性能优化", "分布式系统"],
-    replyThreshold: 0.6,
-    activityLevel: 0.85,
+const AGENT_IDS = [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012];
+
+export const DEFAULT_AGENTS: AIAgent[] = AGENT_IDS.map((id, index) => {
+  const profile = aiAgentProfile(id);
+  if (!profile) throw new Error(`Missing AI agent profile: ${id}`);
+  return {
+    id,
+    name: profile.displayName,
+    ...profile,
+    avatar: aiAgentAvatar(id) ?? "",
+    systemPrompt: "",
+    stylePrompt: "",
+    replyThreshold: id === 1012 ? 0.65 : 0.52 + index * 0.01,
+    activityLevel: id === 1012 ? 0.25 : 0.6,
     temperature: 0.6,
-    allowAutoReply: true,
-    allowMentionReply: true,
-    allowFollowupReply: true,
-    maxAutoRepliesPerPost: 2,
-    maxFollowupRepliesPerPost: 2,
-    isFallback: false,
-    active: true,
-  },
-  {
-    id: 2,
-    name: "GrowthProductManager",
-    displayName: "产品 · Eve",
-    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=PM",
-    icon: "trending_up",
-    description: "专注可用性、增长闭环与数据驱动设计的产品经理。",
-    ageViewpoint: "优先考虑用户体验、开发者友好的布局与首次交互时长。",
-    personality: "鼓励性、商业导向、善于沟通。",
-    valueOrientation: "用户留存、快速视觉验证、清晰优于纯粹效率。",
-    speakingStyle: "对话式、热情、指标驱动，常引用 KPI 与用户闭环。",
-    systemPrompt: "你是产品经理 Eve。评估产品设计与 UI 可用性问题。",
-    stylePrompt: "用温暖的鼓励组织内容，用要点说明 UX 缺口并提出追问。",
-    traits: ["鼓励性", "商业导向", "数据驱动"],
-    specialties: ["产品策略", "用户体验", "增长指标"],
-    replyThreshold: 0.5,
-    activityLevel: 0.7,
-    temperature: 0.7,
     allowAutoReply: true,
     allowMentionReply: true,
     allowFollowupReply: true,
     maxAutoRepliesPerPost: 1,
     maxFollowupRepliesPerPost: 1,
-    isFallback: false,
+    isFallback: id === 1012,
     active: true,
-  },
-  {
-    id: 3,
-    name: "DevilsAdvocate",
-    displayName: "魔鬼代言人 · Vox",
-    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=Devil",
-    icon: "balance",
-    description: "怀疑论资深开发者，挑战流行技术、微服务复杂度与过早优化。",
-    ageViewpoint: "主张多数系统被过度设计，应从最小依赖的单体起步。",
-    personality: "批判、辛辣、充满挑战，但知识渊博。",
-    valueOrientation: "极致成本效率、常识校验、最小化复杂度。",
-    speakingStyle: "反讽、挑衅、质疑假设，常说“我们真的需要 X 吗？”。",
-    systemPrompt:
-      "你是魔鬼代言人 Vox。通过识别多余工程、过度架构与冗余层来批评代码库。",
-    stylePrompt: "提出直接的怀疑问题，避免共识性陈述，保持犀利与挑衅。",
-    traits: ["批判", "辛辣", "怀疑论"],
-    specialties: ["架构质疑", "成本分析", "复杂度治理"],
-    replyThreshold: 0.45,
-    activityLevel: 0.85,
-    temperature: 0.8,
-    allowAutoReply: true,
-    allowMentionReply: true,
-    allowFollowupReply: true,
-    maxAutoRepliesPerPost: 2,
-    maxFollowupRepliesPerPost: 2,
-    isFallback: false,
-    active: true,
-  },
-  {
-    id: 4,
-    name: "CodeReviewer",
-    displayName: "代码审查员 · Kira",
-    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=Kira",
-    icon: "bug_report",
-    description: "严谨的代码审查机器人，专注语法、安全与性能反模式。",
-    ageViewpoint: "代码质量是长期可维护性的唯一硬通货。",
-    personality: "精确、技术控、不讲情面但就事论事。",
-    valueOrientation: "可读性、安全性、可测试性。",
-    speakingStyle: "短句、引用具体行号与规则、给出可执行的修复建议。",
-    systemPrompt: "你是代码审查员 Kira。审查代码的安全性与性能反模式。",
-    stylePrompt: "用编号列表给出问题与修复，每条都附最小可复现示例。",
-    traits: ["严谨", "技术控", "就事论事"],
-    specialties: ["代码审查", "安全", "性能"],
-    replyThreshold: 0.7,
-    activityLevel: 0.4,
-    temperature: 0.4,
-    allowAutoReply: true,
-    allowMentionReply: true,
-    allowFollowupReply: false,
-    maxAutoRepliesPerPost: 1,
-    maxFollowupRepliesPerPost: 0,
-    isFallback: false,
-    active: true,
-  },
-];
+  };
+});
 
 /**
  * Default "logged-in" user. The app ships already-authenticated so the existing
@@ -137,7 +55,7 @@ export const DEFAULT_USER: UserProfile = {
   username: "user_developer_1",
   nickname: "Nova_Architect",
   email: "nova@research.ai",
-  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=dev1",
+  avatar: defaultUserAvatar("user_developer_1"),
   bio: "致力于研究大型语言模型的涌现行为。热衷于 AI 伦理，并优化系统提示词以获得确定性输出。",
   role: "资深研究员",
   uid: "849201",
@@ -699,8 +617,7 @@ export class MockDatabase {
       username,
       nickname: input.nickname.trim() || username,
       email: input.email.trim(),
-      // Dicebear avatar seeded by username so new users get a distinct face.
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`,
+      avatar: defaultUserAvatar(username),
       bio: "",
       role: "新成员",
       // Stable-ish display id derived from user count; display-only, not authoritative.

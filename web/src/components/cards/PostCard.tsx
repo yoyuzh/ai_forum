@@ -13,15 +13,13 @@ interface PostCardProps {
 /** Feed card — matches the Stitch ai_forum_5 prototype post article. */
 export default function PostCard({ post }: PostCardProps) {
   return (
-    <article className="card-base p-lg hover:border-cohere-secondary hover:-translate-y-[2px] hover:shadow-sm transition-all duration-300 ease-cohere">
+    <Link
+      to={`/posts/${post.id}`}
+      className="card-base block p-lg hover:border-cohere-secondary hover:-translate-y-[2px] hover:shadow-sm transition-all duration-300 ease-cohere focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue"
+    >
       <div className="flex items-start justify-between gap-md">
         <h2 className="font-feature-title text-cohere-primary">
-          <Link
-            to={`/posts/${post.id}`}
-            className="hover:text-cohere-secondary transition-all duration-300 ease-cohere"
-          >
-            {post.title}
-          </Link>
+          {post.title}
         </h2>
         <CategoryBadge category={post.category} />
       </div>
@@ -81,6 +79,6 @@ export default function PostCard({ post }: PostCardProps) {
       </div>
 
       <div className="mt-2 font-micro text-cohere-on-surface-variant">{formatRelativeTime(post.createdAt)}</div>
-    </article>
+    </Link>
   );
 }

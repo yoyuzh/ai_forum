@@ -32,6 +32,24 @@ export default function TaskDetailDrawer({ taskId, onClose, canRetry = true }: T
     },
     onError: () => message.error("重试失败，请稍后再试"),
   });
+  const terminateMutation = useMutation({
+    mutationFn: () => adminApi.tasks.terminate(taskId!),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["task", taskId], updated);
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      message.success(`任务 ${updated.id} 已终止`);
+    },
+    onError: () => message.error("终止失败，请稍后再试"),
+  });
+  const markProcessedMutation = useMutation({
+    mutationFn: () => adminApi.tasks.markProcessed(taskId!),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["task", taskId], updated);
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      message.success(`任务 ${updated.id} 已标记完成`);
+    },
+    onError: () => message.error("标记失败，请稍后再试"),
+  });
 
   if (!task) return null;
 
@@ -59,9 +77,19 @@ export default function TaskDetailDrawer({ taskId, onClose, canRetry = true }: T
       }
       extra={
         <div className="flex items-center gap-1">
-          {canRetry && (
+          {canRetry && task.status === "FAILED" && (
             <Button onClick={() => retryMutation.mutate()} loading={retryMutation.isPending}>
               Retry Task
+            </Button>
+          )}
+          {canRetry && (task.status === "PENDING" || task.status === "PROCESSING") && (
+            <Button danger onClick={() => terminateMutation.mutate()} loading={terminateMutation.isPending}>
+              Terminate
+            </Button>
+          )}
+          {canRetry && task.status !== "COMPLETED" && (
+            <Button onClick={() => markProcessedMutation.mutate()} loading={markProcessedMutation.isPending}>
+              Mark Processed
             </Button>
           )}
         </div>

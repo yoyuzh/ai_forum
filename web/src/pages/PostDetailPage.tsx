@@ -1,12 +1,16 @@
 import { useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Virtuoso } from "react-virtuoso";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../api/client";
 import { usePostDetail } from "../hooks/usePosts";
 import { useComments } from "../hooks/useComments";
 import { useDecisionLogsForPost } from "../hooks/useDecisionLogs";
 import { usePostActions } from "../hooks/usePostActions";
+import { useAIStatus } from "../hooks/useAIStatus";
+import { useRelatedDiscussions } from "../hooks/useRelatedDiscussions";
 import { useUserStore } from "../stores/useUserStore";
-import { ProcessingStep } from "../api/types";
+import { Comment, ProcessingStep } from "../api/types";
 import { formatRelativeTime, formatCount } from "../utils/format";
 import MaterialIcon from "../components/ui/MaterialIcon";
 import SafeMarkdown from "../components/ui/SafeMarkdown";
@@ -19,14 +23,8 @@ import PostTags from "../components/sidebar/PostTags";
 import AIProcessingStatus from "../components/sidebar/AIProcessingStatus";
 import RelatedDiscussions from "../components/sidebar/RelatedDiscussions";
 
-const RELATED = [
-  { id: 901, title: "RAG 系统中检索器与生成器的上下文匹配问题" },
-  { id: 902, title: "Mamba 模型在长文本摘要任务上的初步评测" },
-  { id: 903, title: "如何优雅地在生产环境部署 1M Context 模型" },
-];
-
 /** Derive the 4-step processing pipeline from the post's current AI status. */
-function buildSteps(status: "PENDING" | "PROCESSING" | "COMPLETED"): ProcessingStep[] {
+function buildSteps(status: "IDLE" | "RUNNING" | "COMPLETED" | "FAILED", hasTags: boolean): ProcessingStep[] {
   const base: ProcessingStep[] = [
     { key: "tags", label: "分析帖子标签", detail: "已提取核心概念", icon: "label", state: "done" },
     { key: "score", label: "计算 AI 回答意愿分", detail: "评估各代理阈值", icon: "analytics", state: "done" },
@@ -34,9 +32,9 @@ function buildSteps(status: "PENDING" | "PROCESSING" | "COMPLETED"): ProcessingS
     { key: "write", label: "写入评论区", detail: "等待挂起", icon: "edit_note", state: "pending" },
   ];
 
-  if (status === "PENDING") {
+  if (status === "IDLE") {
     return [
-      { ...base[0], state: "active", detail: "正在提取核心概念…" },
+      { ...base[0], state: hasTags ? "done" : "active", detail: hasTags ? "已提取核心概念" : "等待标签分析" },
       { ...base[1], state: "pending", detail: "等待挂起" },
       { ...base[2], state: "pending", detail: "等待挂起" },
       { ...base[3], state: "pending", detail: "等待挂起" },
@@ -50,28 +48,104 @@ function buildSteps(status: "PENDING" | "PROCESSING" | "COMPLETED"): ProcessingS
       { ...base[3], state: "done", detail: "已写入评论区", icon: "check" },
     ];
   }
-  // PROCESSING — the default above already shows steps 1-2 done, 3 active, 4 pending.
+  if (status === "FAILED") {
+    return [
+      { ...base[0], state: hasTags ? "done" : "active", detail: hasTags ? "已提取核心概念" : "等待标签分析" },
+      { ...base[1], detail: "已计算意愿分" },
+      { ...base[2], state: "done", detail: "生成失败", icon: "error" },
+      { ...base[3], state: "pending", detail: "未写入评论区" },
+    ];
+  }
   return base;
+}
+
+function statusFromPost(status: "PENDING" | "PROCESSING" | "COMPLETED"): "IDLE" | "RUNNING" | "COMPLETED" {
+  if (status === "COMPLETED") return "COMPLETED";
+  if (status === "PROCESSING") return "RUNNING";
+  return "IDLE";
+}
+
+type CommentNode = Comment & { children: CommentNode[] };
+type ReplyExpansion = "preview" | "all";
+type FlatReply = { comment: CommentNode; replyTo: string };
+
+const PREVIEW_REPLY_COUNT = 5;
+
+function authorLabel(comment: Comment): string {
+  return comment.author.username;
+}
+
+function buildCommentTree(comments: Comment[]): CommentNode[] {
+  const byID = new Map<number, CommentNode>();
+  const roots: CommentNode[] = [];
+
+  for (const comment of comments) {
+    byID.set(comment.id, { ...comment, children: [] });
+  }
+
+  for (const comment of comments) {
+    const node = byID.get(comment.id)!;
+    const parent = comment.parentId == null ? null : byID.get(comment.parentId);
+    if (parent) {
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots;
+}
+
+function flattenReplies(comment: CommentNode): FlatReply[] {
+  const replies: FlatReply[] = [];
+  for (const child of comment.children) {
+    replies.push({ comment: child, replyTo: authorLabel(comment) });
+    replies.push(...flattenReplies(child));
+  }
+  return replies;
 }
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
   const postId = Number(id);
   const { currentUser } = useUserStore();
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
+  const [expandedReplies, setExpandedReplies] = useState<Record<number, ReplyExpansion>>({});
 
   const { data: post, isLoading } = usePostDetail(postId);
   const { comments, isLoading: commentsLoading, createComment, isSubmitting } = useComments(postId);
   const { likePost, favoritePost, isLiking, isFavoriting } = usePostActions(postId);
   const { data: decisionLogs = [] } = useDecisionLogsForPost(postId);
+  const { data: aiStatusSnapshot } = useAIStatus(postId);
+  const { data: relatedDiscussions = [] } = useRelatedDiscussions(post);
+  const retryAIReplies = useMutation({
+    mutationFn: () => api.aiStatus.retry(postId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aiStatus", postId] });
+      queryClient.invalidateQueries({ queryKey: ["comments", postId] });
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "AI 回复重试失败"),
+  });
 
-  const steps = useMemo(() => (post ? buildSteps(post.aiStatus) : []), [post]);
+  const overallStatus = aiStatusSnapshot?.overallStatus ?? (post ? statusFromPost(post.aiStatus) : "IDLE");
+  const steps = useMemo(() => (post ? buildSteps(overallStatus, post.tags.length > 0) : []), [overallStatus, post]);
   const progress = useMemo(() => {
     if (!post) return 0;
-    if (post.aiStatus === "COMPLETED") return 1;
-    if (post.aiStatus === "PENDING") return 0.25;
-    return 0.75;
-  }, [post]);
+    if (overallStatus === "COMPLETED") return 1;
+    if (overallStatus === "RUNNING") return 0.75;
+    if (overallStatus === "FAILED") return 0.5;
+    return post.tags.length > 0 ? 0.25 : 0;
+  }, [overallStatus, post]);
+  const commentTree = useMemo(() => buildCommentTree(comments), [comments]);
+  const aiReplyScoreByAgent = useMemo(() => {
+    const scores = new Map<number, number>();
+    for (const log of decisionLogs) {
+      if (log.decision === "REPLY") scores.set(log.aiAgentId, log.willingnessScore);
+    }
+    return scores;
+  }, [decisionLogs]);
 
   if (isLoading) {
     return (
@@ -95,18 +169,117 @@ export default function PostDetailPage() {
     );
   }
 
-  const handleSubmit = async (content: string) => {
+  const handleSubmit = async (content: string, parentId: number | null = null) => {
     try {
       setError(null);
       await createComment({
         postId,
-        parentId: null,
+        parentId,
         content,
         author: { username: currentUser!.username, avatar: currentUser!.avatar, isAi: false },
       });
+      setReplyingTo(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "评论发布失败");
     }
+  };
+
+  const withFallbackScore = (comment: CommentNode): CommentNode => {
+    const fallbackScore = comment.author.aiAgentId ? aiReplyScoreByAgent.get(comment.author.aiAgentId) : undefined;
+    return (
+      comment.author.isAi && comment.willingnessScore === undefined && fallbackScore !== undefined
+        ? { ...comment, willingnessScore: fallbackScore }
+        : comment
+    );
+  };
+
+  const renderCommentCard = (comment: CommentNode, replyTo?: string) => {
+    const displayComment = withFallbackScore(comment);
+    return comment.author.isAi ? (
+      <AIComment comment={displayComment} replyTo={replyTo} onFollowup={setReplyingTo} />
+    ) : (
+      <HumanComment comment={displayComment} replyTo={replyTo} onReply={setReplyingTo} />
+    );
+  };
+
+  const renderReplyEditor = (comment: CommentNode) =>
+    replyingTo?.id === comment.id ? (
+      <div className="ml-12">
+        <CommentEditor
+          onSubmit={(content) => handleSubmit(content, comment.id)}
+          isSubmitting={isSubmitting}
+          placeholder={`回复 ${comment.author.role ?? comment.author.username}…`}
+        />
+      </div>
+    ) : null;
+
+  const renderComment = (comment: CommentNode) => {
+    const expansion = expandedReplies[comment.id];
+    const replies = flattenReplies(comment);
+    const visibleChildren =
+      expansion === "all"
+        ? replies
+        : expansion === "preview"
+          ? replies.slice(0, PREVIEW_REPLY_COUNT)
+          : [];
+
+    return (
+      <div className="space-y-md">
+        {renderCommentCard(comment)}
+        {renderReplyEditor(comment)}
+
+        {replies.length > 0 && (
+          <>
+            {!expansion && (
+              <button
+                type="button"
+                onClick={() => setExpandedReplies((current) => ({ ...current, [comment.id]: "preview" }))}
+                className="ml-12 inline-flex items-center gap-1 font-label-mono text-micro text-cohere-muted transition-colors hover:text-cohere-ink focus:outline-none focus-visible:underline"
+              >
+                <MaterialIcon name="expand_more" size={16} />
+                展开 {replies.length} 条回复
+              </button>
+            )}
+            {visibleChildren.length > 0 && (
+              <div className="ml-6 space-y-md border-l border-cohere-hairline pl-md md:ml-12">
+                {visibleChildren.map(({ comment: reply, replyTo }) => (
+                  <div key={reply.id} className="space-y-md">
+                    {renderCommentCard(reply, replyTo)}
+                    {renderReplyEditor(reply)}
+                  </div>
+                ))}
+                <div className="flex flex-wrap gap-md">
+                  {expansion === "preview" && replies.length > PREVIEW_REPLY_COUNT && (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedReplies((current) => ({ ...current, [comment.id]: "all" }))}
+                      className="inline-flex items-center gap-1 font-label-mono text-micro text-cohere-muted transition-colors hover:text-cohere-ink focus:outline-none focus-visible:underline"
+                    >
+                      <MaterialIcon name="unfold_more" size={16} />
+                      继续展开全部
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedReplies((current) => {
+                        const next = { ...current };
+                        delete next[comment.id];
+                        return next;
+                      })
+                    }
+                    className="inline-flex items-center gap-1 font-label-mono text-micro text-cohere-muted transition-colors hover:text-cohere-ink focus:outline-none focus-visible:underline"
+                  >
+                    <MaterialIcon name="expand_less" size={16} />
+                    收起回复
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -183,37 +356,28 @@ export default function PostDetailPage() {
               </div>
             )}
 
-            <CommentEditor onSubmit={handleSubmit} isSubmitting={isSubmitting} />
+            <CommentEditor
+              onSubmit={(content) => handleSubmit(content)}
+              isSubmitting={isSubmitting}
+            />
 
             {commentsLoading ? (
               <p className="font-body-main text-cohere-on-surface-variant">加载评论中…</p>
-            ) : comments.length === 0 ? (
+            ) : commentTree.length === 0 ? (
               <p className="font-body-main text-cohere-on-surface-variant">
                 还没有评论。发布第一条评论，或 @某个 AI 角色让它参与。
               </p>
             ) : (
               <div className="space-y-lg">
-                {comments.length > 20 ? (
+                {commentTree.length > 20 ? (
                   <Virtuoso
                     useWindowScroll
-                    data={comments}
-                    itemContent={(_i, comment) =>
-                      comment.author.isAi ? (
-                        <AIComment key={comment.id} comment={comment} />
-                      ) : (
-                        <HumanComment key={comment.id} comment={comment} />
-                      )
-                    }
+                    data={commentTree}
+                    itemContent={(_i, comment) => renderComment(comment)}
                     style={{ minHeight: 300 }}
                   />
                 ) : (
-                  comments.map((comment) =>
-                    comment.author.isAi ? (
-                      <AIComment key={comment.id} comment={comment} />
-                    ) : (
-                      <HumanComment key={comment.id} comment={comment} />
-                    ),
-                  )
+                  commentTree.map((comment) => <div key={comment.id}>{renderComment(comment)}</div>)
                 )}
               </div>
             )}
@@ -230,7 +394,7 @@ export default function PostDetailPage() {
           </Link>
 
           <div id="decision-logs" className="scroll-mt-24">
-            <ParticipatingAI logs={decisionLogs} />
+            <ParticipatingAI logs={decisionLogs} comments={comments} />
           </div>
 
           <PostTags tags={post.tags} />
@@ -238,15 +402,18 @@ export default function PostDetailPage() {
           <AIProcessingStatus
             steps={steps}
             progress={progress}
-            active={post.aiStatus === "PROCESSING"}
+            status={overallStatus}
+            canRetry={(aiStatusSnapshot?.retryableCount ?? 0) > 0}
+            retrying={retryAIReplies.isPending}
+            onRetry={() => retryAIReplies.mutate()}
             summary={{
-              done: decisionLogs.filter((l) => l.decision === "REPLY").length,
-              running: post.aiStatus === "PROCESSING" ? 1 : 0,
-              failed: decisionLogs.filter((l) => l.decision === "FAILED").length,
+              done: aiStatusSnapshot?.completedCount ?? decisionLogs.filter((l) => l.decision === "REPLY").length,
+              running: aiStatusSnapshot?.runningCount ?? (overallStatus === "RUNNING" ? 1 : 0),
+              failed: aiStatusSnapshot?.failedCount ?? decisionLogs.filter((l) => l.decision === "FAILED").length,
             }}
           />
 
-          <RelatedDiscussions discussions={RELATED} />
+          <RelatedDiscussions discussions={relatedDiscussions} />
         </div>
       </div>
     </main>

@@ -119,10 +119,10 @@ export default function AIDecisionLogsPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-[1440px] overflow-x-hidden px-margin-mobile py-lg md:px-margin-desktop">
+    <div className="admin-page overflow-x-hidden">
       <div className="mb-lg">
-        <h1 className="font-headline-xl font-bold text-cohere-primary">AI 决策日志</h1>
-        <p className="mt-1 font-body-main text-cohere-muted">
+        <h1 className="admin-page-heading">AI 决策日志</h1>
+        <p className="admin-page-subtitle">
           监控和分析 AI 代理在论坛帖子中的响应决策意图与阈值表现。
         </p>
       </div>

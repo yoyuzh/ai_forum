@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"ai-forum/backend/internal/admin"
+	aichat "ai-forum/backend/internal/ai/chat"
 	"ai-forum/backend/internal/ai/decision"
 	"ai-forum/backend/internal/ai/followup"
 	"ai-forum/backend/internal/ai/modelclient"
@@ -165,22 +166,30 @@ func (a *App) NewAPIServer() Process {
 	} else {
 		commentOpts = append(commentOpts, comment.WithMentionLimiter(comment.NewMemoryMentionLimiter(5, time.Minute, time.Now)))
 	}
+	var retryAIReplies http.Handler
 	if a.AsynqClient != nil {
 		enqueuer := task.NewAsynqEnqueuer(a.AsynqClient)
+		generateEnqueuer := task.NewGenerateAIReplyEnqueuer(enqueuer)
 		commentOpts = append(commentOpts,
-			comment.WithGenerateEnqueuer(task.NewGenerateAIReplyEnqueuer(enqueuer)),
+			comment.WithGenerateEnqueuer(generateEnqueuer),
 			comment.WithFollowupEnqueuer(task.NewJudgeAIFollowupEnqueuer(enqueuer)),
 		)
+		retryAIReplies = http.HandlerFunc(reply.NewRetryHandler(a.DB, generateEnqueuer).RetryPostFailedReplies)
 	}
 	commentSvc := comment.NewService(comment.NewSQLRepository(), outbox.Append, commentOpts...)
 	commentHandler := comment.NewHandler(commentSvc, runTx)
 	notificationHTTPHandler := notification.NewHTTPHandler(a.DB)
 	adminHandler := admin.NewHandler(admin.NewSQLStore(a.DB), mustAdminAuthorizer())
+	chatHandler := a.newChatHandler()
+	searchStore := search.NewESIndexStore(a.ES)
+	searchQueryHandler := search.NewQueryHandler(a.DB, searchStore)
 	routes, err := businessRoutes(businessRouteDeps{
 		tokens:                   tokens,
 		register:                 http.HandlerFunc(userHandler.Register),
 		login:                    http.HandlerFunc(authHandler.Login),
 		profile:                  http.HandlerFunc(userHandler.Profile),
+		updateProfile:            http.HandlerFunc(userHandler.UpdateProfile),
+		profileStats:             http.HandlerFunc(userHandler.Stats),
 		listPosts:                http.HandlerFunc(postHandler.List),
 		getPost:                  http.HandlerFunc(postHandler.Get),
 		createPost:               http.HandlerFunc(postHandler.Create),
@@ -198,6 +207,11 @@ func (a *App) NewAPIServer() Process {
 		markAllNotificationsRead: http.HandlerFunc(notificationHTTPHandler.MarkAllRead),
 		postEvents:               sse.NewEventsHandler(hub),
 		aiStatus:                 sse.NewStatusHandler(sse.NewSQLStatusStore(a.DB)),
+		retryAIReplies:           retryAIReplies,
+		listAgentChats:           http.HandlerFunc(chatHandler.List),
+		getAgentChat:             http.HandlerFunc(chatHandler.Get),
+		sendAgentChatMessage:     http.HandlerFunc(chatHandler.Send),
+		searchPosts:              http.HandlerFunc(searchQueryHandler.SearchPosts),
 		updatePostStatus:         http.HandlerFunc(postHandler.UpdateStatus),
 		admin:                    adminHandler,
 	})
@@ -217,6 +231,8 @@ type businessRouteDeps struct {
 	register                 http.Handler
 	login                    http.Handler
 	profile                  http.Handler
+	updateProfile            http.Handler
+	profileStats             http.Handler
 	listPosts                http.Handler
 	getPost                  http.Handler
 	createPost               http.Handler
@@ -234,6 +250,11 @@ type businessRouteDeps struct {
 	markAllNotificationsRead http.Handler
 	postEvents               http.Handler
 	aiStatus                 http.Handler
+	retryAIReplies           http.Handler
+	listAgentChats           http.Handler
+	getAgentChat             http.Handler
+	sendAgentChatMessage     http.Handler
+	searchPosts              http.Handler
 	updatePostStatus         http.Handler
 	admin                    *admin.Handler
 }
@@ -250,6 +271,8 @@ func businessRoutes(deps businessRouteDeps) (router.BusinessRoutes, error) {
 		Register:                 deps.register,
 		Login:                    deps.login,
 		Profile:                  deps.tokens.Middleware(deps.profile),
+		UpdateProfile:            deps.tokens.Middleware(deps.updateProfile),
+		ProfileStats:             deps.tokens.Middleware(deps.profileStats),
 		ListPosts:                deps.listPosts,
 		GetPost:                  deps.getPost,
 		CreatePost:               deps.tokens.Middleware(deps.createPost),
@@ -267,9 +290,27 @@ func businessRoutes(deps businessRouteDeps) (router.BusinessRoutes, error) {
 		MarkAllNotificationsRead: deps.tokens.Middleware(deps.markAllNotificationsRead),
 		PostEvents:               deps.postEvents,
 		AIStatus:                 deps.aiStatus,
+		RetryAIReplies:           deps.retryAIReplies,
+		ListAgentChats:           deps.tokens.Middleware(deps.listAgentChats),
+		GetAgentChat:             deps.tokens.Middleware(deps.getAgentChat),
+		SendAgentChatMessage:     deps.tokens.Middleware(deps.sendAgentChatMessage),
+		SearchPosts:              deps.searchPosts,
 		AdminUpdatePostStatus:    deps.tokens.Middleware(authz.RequireSubject("post", "delete-any", deps.updatePostStatus)),
 	}
 	if deps.admin != nil {
+		routes.ListAgents = http.HandlerFunc(deps.admin.ListPublicAgents)
+		routes.ListAITasks = http.HandlerFunc(deps.admin.ListPublicTasks)
+		routes.ListDecisionLogs = http.HandlerFunc(deps.admin.ListPublicDecisionLogs)
+		routes.ListPostDecisionLogs = http.HandlerFunc(deps.admin.ListPostDecisionLogs)
+		routes.ListPostAITasks = http.HandlerFunc(deps.admin.ListPostTasks)
+		routes.ListAIActivities = http.HandlerFunc(deps.admin.ListActivities)
+		routes.AdminDashboardStats = deps.tokens.Middleware(http.HandlerFunc(deps.admin.DashboardStats))
+		routes.AdminDashboardTrend = deps.tokens.Middleware(http.HandlerFunc(deps.admin.WeeklyTrend))
+		routes.AdminDashboardBreakdown = deps.tokens.Middleware(http.HandlerFunc(deps.admin.TaskStatusBreakdown))
+		routes.AdminDashboardServices = deps.tokens.Middleware(http.HandlerFunc(deps.admin.Services))
+		routes.AdminDashboardRecentPosts = deps.tokens.Middleware(http.HandlerFunc(deps.admin.RecentPosts))
+		routes.AdminDashboardRecentTasks = deps.tokens.Middleware(http.HandlerFunc(deps.admin.RecentTasks))
+		routes.AdminDashboardDecisions = deps.tokens.Middleware(http.HandlerFunc(deps.admin.DecisionTimeline))
 		routes.AdminPermissions = deps.tokens.Middleware(http.HandlerFunc(deps.admin.Permissions))
 		routes.AdminListUsers = deps.tokens.Middleware(http.HandlerFunc(deps.admin.ListUsers))
 		routes.AdminListPosts = deps.tokens.Middleware(http.HandlerFunc(deps.admin.ListPosts))
@@ -298,18 +339,42 @@ func mustAdminAuthorizer() *rbac.Authorizer {
 	return authz
 }
 
+func (a *App) newChatHandler() *aichat.Handler {
+	aiCfg := config.AIConfig{BaseURL: config.DefaultAIBaseURL, Model: "gpt-4o-mini"}
+	if a.Cfg != nil {
+		aiCfg = a.Cfg.AI
+	}
+	client := modelclient.NewObservedClient(
+		modelclient.NewOpenAICompatibleClient(aiCfg.BaseURL, aiCfg.APIKey, aiCfg.Model, nil),
+		a.Log,
+		aiCfg.Model,
+	)
+	return aichat.NewHandler(aichat.NewService(aichat.NewSQLStore(a.DB), client))
+}
+
 // NewWorker wires the worker-service lifecycle harness and P6 task handlers.
 func (a *App) NewWorker() Process {
 	mux := asynq.NewServeMux()
 	var consumers []workerRabbitConsumerSpec
 	var ensureIndex func(context.Context) error
 	if a.DB != nil {
+		aiCfg := config.AIConfig{BaseURL: config.DefaultAIBaseURL, Model: "gpt-4o-mini"}
+		if a.Cfg != nil {
+			aiCfg = a.Cfg.AI
+		}
+		tagClient := modelclient.NewObservedClient(
+			modelclient.NewOpenAICompatibleClient(aiCfg.BaseURL, aiCfg.APIKey, aiCfg.Model, nil),
+			a.Log,
+			aiCfg.Model,
+		)
 		handlers := task.Handlers{
-			TagPost: tagging.NewSQLHandler(a.DB, tagging.RuleTagger{}).HandleTagPost,
+			TagPost: tagging.NewSQLHandler(a.DB, tagging.NewModelTagger(tagClient, tagging.RuleTagger{})).HandleTagPost,
 		}
 		if a.AsynqClient != nil {
 			enqueuer := task.NewAsynqEnqueuer(a.AsynqClient)
-			handlers.DecideAIReply = decision.NewSQLHandler(a.DB, task.NewGenerateAIReplyEnqueuer(enqueuer)).HandleDecideAIReply
+			decisionHandler := decision.NewSQLHandler(a.DB, task.NewGenerateAIReplyEnqueuer(enqueuer))
+			decisionHandler.SetWillingnessScorer(decision.NewModelWillingnessScorer(tagClient))
+			handlers.DecideAIReply = decisionHandler.HandleDecideAIReply
 			consumers = workerRabbitConsumerSpecs(enqueuer, task.NewSQLProcessedStore(a.DB))
 		}
 		replyHandler := a.newReplyHandler()
@@ -346,12 +411,12 @@ func (a *App) NewWorker() Process {
 }
 
 func (a *App) newReplyHandler() *reply.Handler {
-	aiCfg := config.AIConfig{Model: "gpt-4o-mini", RequestPerSecond: 1, Burst: 1}
+	aiCfg := config.AIConfig{BaseURL: config.DefaultAIBaseURL, Model: "gpt-4o-mini", RequestPerSecond: 1, Burst: 1}
 	if a.Cfg != nil {
 		aiCfg = a.Cfg.AI
 	}
 	client := modelclient.NewObservedClient(
-		modelclient.NewOpenAICompatibleClient("https://api.openai.com", aiCfg.APIKey, aiCfg.Model, nil),
+		modelclient.NewOpenAICompatibleClient(aiCfg.BaseURL, aiCfg.APIKey, aiCfg.Model, nil),
 		a.Log,
 		aiCfg.Model,
 	)
@@ -367,12 +432,12 @@ func (a *App) newReplyHandler() *reply.Handler {
 }
 
 func (a *App) newFollowupHandler() *followup.Handler {
-	aiCfg := config.AIConfig{Model: "gpt-4o-mini"}
+	aiCfg := config.AIConfig{BaseURL: config.DefaultAIBaseURL, Model: "gpt-4o-mini"}
 	if a.Cfg != nil {
 		aiCfg = a.Cfg.AI
 	}
 	client := modelclient.NewObservedClient(
-		modelclient.NewOpenAICompatibleClient("https://api.openai.com", aiCfg.APIKey, aiCfg.Model, nil),
+		modelclient.NewOpenAICompatibleClient(aiCfg.BaseURL, aiCfg.APIKey, aiCfg.Model, nil),
 		a.Log,
 		aiCfg.Model,
 	)

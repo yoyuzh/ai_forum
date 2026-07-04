@@ -151,6 +151,7 @@ type recordingEnqueuer struct {
 	agentID         int64
 	triggerType     string
 	taskID          string
+	maxRetry        int
 	search          SyncSearchIndexPayload
 	notify          SendNotificationPayload
 	calls           int
@@ -189,6 +190,9 @@ func (e *recordingEnqueuer) EnqueueWithOptions(ctx context.Context, taskType str
 	for _, opt := range opts {
 		if opt.Type() == asynq.TaskIDOpt {
 			e.taskID = opt.Value().(string)
+		}
+		if opt.Type() == asynq.MaxRetryOpt {
+			e.maxRetry = opt.Value().(int)
 		}
 	}
 	return e.Enqueue(ctx, taskType, payload)

@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useUserStore } from "../../stores/useUserStore";
 import { useConnectionStore } from "../../stores/useConnectionStore";
 import { useNotifications } from "../../hooks/useNotifications";
-import MaterialIcon from "../ui/MaterialIcon";
+import { forumLogo } from "../../assets/brand";
+import BrandIcon from "../ui/BrandIcon";
 
 const NAV_LINKS = [
   { to: "/", label: "首页", end: true },
@@ -29,13 +30,12 @@ export default function Header() {
     <header className="bg-cohere-surface border-b border-cohere-hairline sticky top-0 z-50 w-full">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-margin-mobile md:px-margin-desktop">
         <div className="flex items-center gap-lg">
-          <NavLink to="/" className="flex items-baseline gap-xs" aria-label="AI Forum 首页">
-            <span className="font-headline-lg font-black text-cohere-primary">AI Forum</span>
-            <span className="hidden font-micro text-cohere-on-surface-variant sm:inline">Research Lab</span>
+          <NavLink to="/" className="flex items-center" aria-label="AI Forum 首页">
+            <img src={forumLogo} alt="AI Forum Research Lab" className="h-9 w-auto" />
           </NavLink>
 
           <form onSubmit={onSearch} className="relative hidden items-center md:flex">
-            <MaterialIcon name="search" className="absolute left-2 text-cohere-muted" />
+            <BrandIcon name="search" size={18} className="absolute left-2 opacity-70" />
             <input
               id="site-search"
               name="q"
@@ -94,7 +94,7 @@ export default function Header() {
               className="relative flex items-center justify-center rounded-full p-sm text-cohere-on-surface-variant hover:bg-cohere-surface-variant hover:text-cohere-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue"
               aria-label={`通知 ${unreadCount}`}
             >
-              <MaterialIcon name="notifications" />
+              <BrandIcon name="notification" size={22} />
               {unreadCount > 0 && (
                 <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-cohere-error px-1 text-center font-micro text-[11px] text-white">
                   {unreadCount}
@@ -158,6 +158,7 @@ export default function Header() {
                 className="h-5 w-5 rounded-full border border-cohere-on-primary/30"
               />
             )}
+            {!currentUser && <BrandIcon name="profile" size={18} />}
             个人中心
           </NavLink>
         </div>

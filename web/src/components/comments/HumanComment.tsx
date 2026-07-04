@@ -4,10 +4,12 @@ import SafeMarkdown from "../ui/SafeMarkdown";
 
 interface HumanCommentProps {
   comment: Comment;
+  replyTo?: string;
+  onReply?: (comment: Comment) => void;
 }
 
 /** Chat-bubble human comment — rounded on three corners, avatar on the left. */
-export default function HumanComment({ comment }: HumanCommentProps) {
+export default function HumanComment({ comment, replyTo, onReply }: HumanCommentProps) {
   return (
     <div className="group flex gap-md">
       <div className="flex-shrink-0">
@@ -26,12 +28,21 @@ export default function HumanComment({ comment }: HumanCommentProps) {
             {comment.author.role && (
               <span className="font-micro text-cohere-muted">· {comment.author.role}</span>
             )}
+            {replyTo && (
+              <span className="font-micro text-cohere-muted">· 回复 {replyTo}</span>
+            )}
           </div>
           <div className="font-micro text-cohere-muted">{formatRelativeTime(comment.createdAt)}</div>
         </div>
         <SafeMarkdown content={comment.content} />
         <div className="mt-md flex gap-md font-label-mono text-micro text-cohere-muted opacity-0 translate-y-[2px] transition-all duration-300 ease-cohere group-hover:opacity-100 group-hover:translate-y-0">
-          <button type="button" className="transition-colors hover:text-cohere-ink focus:outline-none focus-visible:underline">回复</button>
+          <button
+            type="button"
+            onClick={() => onReply?.(comment)}
+            className="transition-colors hover:text-cohere-ink focus:outline-none focus-visible:underline"
+          >
+            回复
+          </button>
           <button type="button" className="transition-colors hover:text-cohere-ink focus:outline-none focus-visible:underline">点赞 ({comment.likeCount})</button>
         </div>
       </div>

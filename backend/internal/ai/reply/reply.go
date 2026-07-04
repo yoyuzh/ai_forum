@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
@@ -18,9 +20,12 @@ import (
 	"ai-forum/backend/internal/moderation"
 	"ai-forum/backend/internal/outbox"
 	"ai-forum/backend/internal/sse"
+	"ai-forum/backend/internal/task"
 )
 
 var ErrRateLimited = errors.New("ai reply rate limited")
+
+const MaxRetryAttempts = task.GenerateAIReplyMaxRetries
 
 type Task struct {
 	PostID          int64
@@ -39,6 +44,10 @@ const HotCounterAIReply = cache.HotCounterAIReply
 
 type HotTracker interface {
 	RecordInteraction(context.Context, int64, HotCounter, int64) error
+}
+
+type RetryEnqueuer interface {
+	EnqueueGenerateAIReplyRetry(context.Context, task.GenerateAIReplyPayload, string) error
 }
 
 type Handler struct {
@@ -72,23 +81,16 @@ func (h *Handler) HandleGenerateAIReply(ctx context.Context, task Task) error {
 	if task.TriggerType == "" {
 		task.TriggerType = "AUTO"
 	}
-	existing, err := h.existingStatus(ctx, task)
-	if err != nil {
-		return err
-	}
-	if existing != "" {
-		return nil
-	}
 	if ok, err := h.limiter.Allow(ctx); err != nil {
 		return err
 	} else if !ok {
 		return ErrRateLimited
 	}
-	taskID, inserted, err := h.createTask(ctx, task)
+	taskID, shouldRun, err := h.acquireTask(ctx, task)
 	if err != nil {
 		return err
 	}
-	if !inserted {
+	if !shouldRun {
 		return nil
 	}
 	eligible, err := h.eligible(ctx, task)
@@ -135,19 +137,47 @@ func (h *Handler) HandleGenerateAIReply(ctx context.Context, task Task) error {
 	return nil
 }
 
-func (h *Handler) existingStatus(ctx context.Context, task Task) (string, error) {
-	var status string
-	err := h.db.GetContext(ctx, &status, `
-		SELECT status
+type taskRecord struct {
+	ID           int64  `db:"id"`
+	Status       string `db:"status"`
+	AttemptCount int    `db:"attempt_count"`
+}
+
+func (h *Handler) acquireTask(ctx context.Context, task Task) (int64, bool, error) {
+	var row taskRecord
+	err := h.db.GetContext(ctx, &row, `
+		SELECT id, status, attempt_count
 		FROM ai_reply_tasks
 		WHERE post_id = ? AND parent_comment_id_norm = COALESCE(?,0)
 		  AND ai_agent_id = ? AND trigger_type = ?
 		LIMIT 1`,
 		task.PostID, task.ParentCommentID, task.AgentID, task.TriggerType)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+		id, inserted, err := h.createTask(ctx, task)
+		return id, inserted, err
 	}
-	return status, err
+	if err != nil {
+		return 0, false, err
+	}
+	if row.Status != "FAILED" && row.Status != "RETRYING" {
+		return row.ID, false, nil
+	}
+	if row.AttemptCount >= MaxRetryAttempts {
+		return row.ID, false, nil
+	}
+	res, err := h.db.ExecContext(ctx, `
+		UPDATE ai_reply_tasks
+		SET status = 'RUNNING', last_error = NULL
+		WHERE id = ? AND status IN ('FAILED', 'RETRYING') AND attempt_count < ?`,
+		row.ID, MaxRetryAttempts)
+	if err != nil {
+		return 0, false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, false, err
+	}
+	return row.ID, affected == 1, nil
 }
 
 func (h *Handler) createTask(ctx context.Context, task Task) (int64, bool, error) {
@@ -168,7 +198,7 @@ func (h *Handler) createTask(ctx context.Context, task Task) (int64, bool, error
 func (h *Handler) promptInput(ctx context.Context, task Task) (modelclient.PromptInput, error) {
 	var in modelclient.PromptInput
 	if err := h.db.GetContext(ctx, &in, `
-		SELECT a.name AS agent_name, p.title AS post_title, p.content AS post_content
+		SELECT a.name AS agent_name, COALESCE(a.system_prompt, '') AS system_prompt, p.title AS post_title, p.content AS post_content
 		FROM posts p
 		JOIN ai_agents a ON a.id = ?
 		WHERE p.id = ? AND a.enabled = TRUE`,
@@ -256,13 +286,80 @@ func (h *Handler) persistFailure(ctx context.Context, taskID int64, task Task, r
 func (h *Handler) markTask(ctx context.Context, db database.DBTX, taskID int64, status string, lastErr *string, commentID *int64) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE ai_reply_tasks
-		SET status = ?, last_error = ?, comment_id = COALESCE(?, comment_id), attempt_count = attempt_count + 1
+		SET status = ?, last_error = ?, comment_id = COALESCE(?, comment_id),
+		    attempt_count = attempt_count + IF(? = 'FAILED', 1, 0)
 		WHERE id = ?`,
-		status, lastErr, commentID, taskID)
+		status, lastErr, commentID, status, taskID)
 	return err
 }
 
 func isDuplicateKey(err error) bool {
 	var mysqlErr *mysql.MySQLError
 	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
+}
+
+type RetryHandler struct {
+	db       *sqlx.DB
+	enqueuer RetryEnqueuer
+}
+
+func NewRetryHandler(db *sqlx.DB, enqueuer RetryEnqueuer) *RetryHandler {
+	return &RetryHandler{db: db, enqueuer: enqueuer}
+}
+
+func (h *RetryHandler) RetryPostFailedReplies(w http.ResponseWriter, r *http.Request) {
+	postID, err := strconv.ParseInt(r.PathValue("postId"), 10, 64)
+	if err != nil || postID <= 0 {
+		http.Error(w, "invalid postId", http.StatusBadRequest)
+		return
+	}
+	var rows []struct {
+		ID              int64  `db:"id"`
+		ParentCommentID *int64 `db:"parent_comment_id"`
+		AIAgentID       int64  `db:"ai_agent_id"`
+		TriggerType     string `db:"trigger_type"`
+		AttemptCount    int    `db:"attempt_count"`
+	}
+	if err := h.db.SelectContext(r.Context(), &rows, `
+		SELECT id, parent_comment_id, ai_agent_id, trigger_type, attempt_count
+		FROM ai_reply_tasks
+		WHERE post_id = ? AND status = 'FAILED' AND attempt_count < ?`,
+		postID, MaxRetryAttempts); err != nil {
+		http.Error(w, "list retryable ai tasks", http.StatusInternalServerError)
+		return
+	}
+	retried := 0
+	for _, row := range rows {
+		res, err := h.db.ExecContext(r.Context(), `
+			UPDATE ai_reply_tasks
+			SET status = 'RETRYING', last_error = NULL
+			WHERE id = ? AND status = 'FAILED' AND attempt_count < ?`,
+			row.ID, MaxRetryAttempts)
+		if err != nil {
+			http.Error(w, "mark ai task retrying", http.StatusInternalServerError)
+			return
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			http.Error(w, "mark ai task retrying", http.StatusInternalServerError)
+			return
+		}
+		if affected != 1 {
+			continue
+		}
+		payload := task.GenerateAIReplyPayload{
+			PostID:          postID,
+			ParentCommentID: row.ParentCommentID,
+			AIAgentID:       row.AIAgentID,
+			TriggerType:     row.TriggerType,
+		}
+		if err := h.enqueuer.EnqueueGenerateAIReplyRetry(r.Context(), payload, fmt.Sprintf("%d:%d", row.ID, row.AttemptCount+1)); err != nil {
+			_, _ = h.db.ExecContext(context.Background(), `UPDATE ai_reply_tasks SET status = 'FAILED', last_error = ? WHERE id = ?`, err.Error(), row.ID)
+			http.Error(w, "enqueue ai retry", http.StatusInternalServerError)
+			return
+		}
+		retried++
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = fmt.Fprintf(w, `{"retried":%d}`, retried)
 }

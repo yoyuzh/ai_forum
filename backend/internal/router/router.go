@@ -15,40 +15,60 @@ type Dependency struct {
 }
 
 type BusinessRoutes struct {
-	Register                 http.Handler
-	Login                    http.Handler
-	Profile                  http.Handler
-	ListPosts                http.Handler
-	GetPost                  http.Handler
-	CreatePost               http.Handler
-	UpdatePost               http.Handler
-	DeletePost               http.Handler
-	ListComments             http.Handler
-	CreateComment            http.Handler
-	LikePost                 http.Handler
-	UnlikePost               http.Handler
-	FavoritePost             http.Handler
-	UnfavoritePost           http.Handler
-	ListNotifications        http.Handler
-	UnreadNotifications      http.Handler
-	MarkNotificationRead     http.Handler
-	MarkAllNotificationsRead http.Handler
-	PostEvents               http.Handler
-	AIStatus                 http.Handler
-	AdminUpdatePostStatus    http.Handler
-	AdminPermissions         http.Handler
-	AdminListUsers           http.Handler
-	AdminListPosts           http.Handler
-	AdminListComments        http.Handler
-	AdminListAgents          http.Handler
-	AdminUpdateAgent         http.Handler
-	AdminListTasks           http.Handler
-	AdminRetryTask           http.Handler
-	AdminTerminateTask       http.Handler
-	AdminMarkTaskProcessed   http.Handler
-	AdminListDecisionLogs    http.Handler
-	AdminListTags            http.Handler
-	AdminListPreferences     http.Handler
+	Register                  http.Handler
+	Login                     http.Handler
+	Profile                   http.Handler
+	UpdateProfile             http.Handler
+	ProfileStats              http.Handler
+	ListPosts                 http.Handler
+	GetPost                   http.Handler
+	CreatePost                http.Handler
+	UpdatePost                http.Handler
+	DeletePost                http.Handler
+	ListComments              http.Handler
+	CreateComment             http.Handler
+	LikePost                  http.Handler
+	UnlikePost                http.Handler
+	FavoritePost              http.Handler
+	UnfavoritePost            http.Handler
+	ListNotifications         http.Handler
+	UnreadNotifications       http.Handler
+	MarkNotificationRead      http.Handler
+	MarkAllNotificationsRead  http.Handler
+	PostEvents                http.Handler
+	AIStatus                  http.Handler
+	RetryAIReplies            http.Handler
+	ListAgents                http.Handler
+	ListAgentChats            http.Handler
+	GetAgentChat              http.Handler
+	SendAgentChatMessage      http.Handler
+	ListAITasks               http.Handler
+	ListDecisionLogs          http.Handler
+	ListPostDecisionLogs      http.Handler
+	ListPostAITasks           http.Handler
+	ListAIActivities          http.Handler
+	SearchPosts               http.Handler
+	AdminUpdatePostStatus     http.Handler
+	AdminDashboardStats       http.Handler
+	AdminDashboardTrend       http.Handler
+	AdminDashboardBreakdown   http.Handler
+	AdminDashboardServices    http.Handler
+	AdminDashboardRecentPosts http.Handler
+	AdminDashboardRecentTasks http.Handler
+	AdminDashboardDecisions   http.Handler
+	AdminPermissions          http.Handler
+	AdminListUsers            http.Handler
+	AdminListPosts            http.Handler
+	AdminListComments         http.Handler
+	AdminListAgents           http.Handler
+	AdminUpdateAgent          http.Handler
+	AdminListTasks            http.Handler
+	AdminRetryTask            http.Handler
+	AdminTerminateTask        http.Handler
+	AdminMarkTaskProcessed    http.Handler
+	AdminListDecisionLogs     http.Handler
+	AdminListTags             http.Handler
+	AdminListPreferences      http.Handler
 }
 
 // New builds the api-server router.
@@ -81,6 +101,12 @@ func NewWithBusinessRoutes(deps []Dependency, internal http.Handler, business Bu
 	}
 	if business.Profile != nil {
 		mux.Handle("GET /api/me", business.Profile)
+	}
+	if business.UpdateProfile != nil {
+		mux.Handle("PATCH /api/me", business.UpdateProfile)
+	}
+	if business.ProfileStats != nil {
+		mux.Handle("GET /api/me/stats", business.ProfileStats)
 	}
 	if business.CreatePost != nil {
 		mux.Handle("POST /api/posts", business.CreatePost)
@@ -127,8 +153,62 @@ func NewWithBusinessRoutes(deps []Dependency, internal http.Handler, business Bu
 	if business.AIStatus != nil {
 		mux.Handle("GET /api/posts/{postId}/ai-status", business.AIStatus)
 	}
+	if business.RetryAIReplies != nil {
+		mux.Handle("POST /api/posts/{postId}/ai-retry", business.RetryAIReplies)
+	}
+	if business.ListAgents != nil {
+		mux.Handle("GET /api/agents", business.ListAgents)
+	}
+	if business.ListAgentChats != nil {
+		mux.Handle("GET /api/agent-chats", business.ListAgentChats)
+	}
+	if business.GetAgentChat != nil {
+		mux.Handle("GET /api/agents/{agentId}/chat", business.GetAgentChat)
+	}
+	if business.SendAgentChatMessage != nil {
+		mux.Handle("POST /api/agents/{agentId}/chat/messages", business.SendAgentChatMessage)
+	}
+	if business.ListAITasks != nil {
+		mux.Handle("GET /api/ai-tasks", business.ListAITasks)
+	}
+	if business.ListDecisionLogs != nil {
+		mux.Handle("GET /api/decision-logs", business.ListDecisionLogs)
+	}
+	if business.ListPostDecisionLogs != nil {
+		mux.Handle("GET /api/posts/{postId}/decision-logs", business.ListPostDecisionLogs)
+	}
+	if business.ListPostAITasks != nil {
+		mux.Handle("GET /api/posts/{postId}/ai-tasks", business.ListPostAITasks)
+	}
+	if business.ListAIActivities != nil {
+		mux.Handle("GET /api/ai-activity", business.ListAIActivities)
+	}
+	if business.SearchPosts != nil {
+		mux.Handle("GET /api/search/posts", business.SearchPosts)
+	}
 	if business.AdminUpdatePostStatus != nil {
 		mux.Handle("PATCH /api/admin/posts/{postId}/status", business.AdminUpdatePostStatus)
+	}
+	if business.AdminDashboardStats != nil {
+		mux.Handle("GET /api/admin/dashboard/stats", business.AdminDashboardStats)
+	}
+	if business.AdminDashboardTrend != nil {
+		mux.Handle("GET /api/admin/dashboard/weekly-trend", business.AdminDashboardTrend)
+	}
+	if business.AdminDashboardBreakdown != nil {
+		mux.Handle("GET /api/admin/dashboard/task-status-breakdown", business.AdminDashboardBreakdown)
+	}
+	if business.AdminDashboardServices != nil {
+		mux.Handle("GET /api/admin/dashboard/services", business.AdminDashboardServices)
+	}
+	if business.AdminDashboardRecentPosts != nil {
+		mux.Handle("GET /api/admin/dashboard/recent-posts", business.AdminDashboardRecentPosts)
+	}
+	if business.AdminDashboardRecentTasks != nil {
+		mux.Handle("GET /api/admin/dashboard/recent-tasks", business.AdminDashboardRecentTasks)
+	}
+	if business.AdminDashboardDecisions != nil {
+		mux.Handle("GET /api/admin/dashboard/decision-timeline", business.AdminDashboardDecisions)
 	}
 	if business.AdminPermissions != nil {
 		mux.Handle("GET /api/admin/permissions", business.AdminPermissions)

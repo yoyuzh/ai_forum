@@ -144,22 +144,25 @@ func (s *Service) Create(ctx context.Context, tx DBTX, in CreateInput) (Comment,
 			})
 		}
 	}
-	if in.ParentCommentID != nil && s.followup != nil {
-		parent, err := s.repo.Get(ctx, tx, *in.ParentCommentID)
-		if err != nil && !errors.Is(err, ErrCommentNotFound) {
-			return Comment{}, err
+	if len(agents) == 0 && s.followup != nil {
+		var parentID int64
+		if in.ParentCommentID != nil {
+			parent, err := s.repo.Get(ctx, tx, *in.ParentCommentID)
+			if err != nil && !errors.Is(err, ErrCommentNotFound) {
+				return Comment{}, err
+			}
+			if parent.CommentType == "AI" {
+				parentID = *in.ParentCommentID
+			}
 		}
-		if parent.CommentType == "AI" {
-			parentID := *in.ParentCommentID
-			replyID := c.ID
-			s.afterCommit(ctx, func(afterCtx context.Context) error {
-				return s.followup.EnqueueJudgeAIFollowup(afterCtx, task.JudgeAIFollowupPayload{
-					PostID:          c.PostID,
-					ParentCommentID: parentID,
-					ReplyCommentID:  replyID,
-				})
+		replyID := c.ID
+		s.afterCommit(ctx, func(afterCtx context.Context) error {
+			return s.followup.EnqueueJudgeAIFollowup(afterCtx, task.JudgeAIFollowupPayload{
+				PostID:          c.PostID,
+				ParentCommentID: parentID,
+				ReplyCommentID:  replyID,
 			})
-		}
+		})
 	}
 	return c, nil
 }
@@ -189,7 +192,7 @@ func (s *Service) Delete(ctx context.Context, tx DBTX, postID, commentID int64) 
 	})
 }
 
-var mentionRE = regexp.MustCompile(`@([A-Za-z0-9_]+)`)
+var mentionRE = regexp.MustCompile(`@([\pL\pN_]+)`)
 
 func (s *Service) validMentionAgents(ctx context.Context, tx DBTX, content string) ([]MentionAgent, error) {
 	names := parseMentionNames(content)

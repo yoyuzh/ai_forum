@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Table, Select, Input, Button } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { adminApi } from "../api/client";
@@ -10,6 +10,7 @@ import TaskDetailDrawer from "../components/TaskDetailDrawer";
 import { usePermission } from "../hooks/usePermission";
 
 export default function AITasksPage() {
+  const queryClient = useQueryClient();
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["tasks"],
     queryFn: adminApi.tasks.list,
@@ -137,21 +138,24 @@ export default function AITasksPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1440px] px-margin-mobile py-lg md:px-margin-desktop">
+    <div className="admin-page">
       <div className="mb-xl flex flex-col items-start justify-between gap-md md:flex-row md:items-center">
         <div>
-          <h1 className="font-headline-xl font-bold tracking-tight text-cohere-ink">AI Reply Tasks</h1>
-          <p className="mt-1 font-body-large text-cohere-muted">
+          <h1 className="admin-page-heading">AI Reply Tasks</h1>
+          <p className="admin-page-subtitle">
             监控并管理自动化 AI 回复队列。
           </p>
         </div>
         <div className="flex gap-sm">
-          <Button icon={<MaterialIcon name="refresh" size={18} />}>Refresh</Button>
-          {canRetry && (
-            <Button type="primary" icon={<MaterialIcon name="play_arrow" size={18} />}>
-              Resume All Failed
-            </Button>
-          )}
+          <Button
+            icon={<MaterialIcon name="refresh" size={18} />}
+            onClick={() => {
+              void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+              void queryClient.invalidateQueries({ queryKey: ["taskSummary"] });
+            }}
+          >
+            Refresh
+          </Button>
         </div>
       </div>
 

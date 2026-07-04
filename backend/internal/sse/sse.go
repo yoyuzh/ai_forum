@@ -69,6 +69,8 @@ func (h *InMemoryHub) Publish(_ context.Context, postID int64, event Event) erro
 type Status struct {
 	CompletedCount int    `json:"completedCount"`
 	RunningCount   int    `json:"runningCount"`
+	FailedCount    int    `json:"failedCount"`
+	RetryableCount int    `json:"retryableCount"`
 	OverallStatus  string `json:"overallStatus"`
 }
 
@@ -110,6 +112,8 @@ func NewStatusHandler(store StatusStore) http.Handler {
 			status.OverallStatus = "RUNNING"
 		} else if status.CompletedCount > 0 {
 			status.OverallStatus = "COMPLETED"
+		} else if status.FailedCount > 0 {
+			status.OverallStatus = "FAILED"
 		} else {
 			status.OverallStatus = "IDLE"
 		}

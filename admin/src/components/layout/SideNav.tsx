@@ -23,33 +23,35 @@ const NAV: NavItem[] = [
 /** Fixed left sidebar — operational nav, dense and console-styled. */
 export default function SideNav() {
   return (
-    <aside className="fixed left-0 top-16 z-40 hidden h-[calc(100vh-64px)] w-64 flex-col gap-md overflow-y-auto border-r border-cohere-hairline bg-cohere-surface-low p-md md:flex">
-      <div className="mb-lg px-sm">
-        <div className="font-label-mono-bold text-cohere-on-surface">后台管理</div>
-        <div className="font-micro text-cohere-muted">系统管理</div>
+    <aside className="fixed left-0 top-16 z-40 hidden h-[calc(100vh-64px)] w-64 flex-col gap-md overflow-y-auto bg-cohere-surface-low p-md md:flex">
+      <div className="mb-lg px-xs">
+        <div className="font-headline-lg font-bold text-cohere-primary">后台管理</div>
+        <div className="mt-xs font-caption text-cohere-muted">系统管理</div>
       </div>
 
-      {NAV.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.to === "/"}
-          className={({ isActive }) =>
-            `flex items-center gap-md rounded-lg px-md py-sm font-label-mono transition-transform transition-colors active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue ${
-              isActive
-                ? "bg-cohere-secondary-container text-cohere-on-secondary-container font-bold"
-                : "text-cohere-on-surface-variant hover:bg-cohere-surface-variant"
-            }`
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <MaterialIcon name={item.icon} fill={isActive} />
-              {item.label}
-            </>
-          )}
-        </NavLink>
-      ))}
+      <nav className="flex flex-col gap-xs">
+        {NAV.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === "/"}
+            className={({ isActive }) =>
+              `flex items-center gap-sm rounded-lg px-sm py-xs font-label-mono transition-transform transition-colors active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue ${
+                isActive
+                  ? "bg-cohere-secondary-container text-cohere-on-secondary-container font-bold"
+                  : "text-cohere-on-surface-variant hover:bg-cohere-surface-variant hover:text-cohere-primary"
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <MaterialIcon name={item.icon} fill={isActive} size={20} />
+                {item.label}
+              </>
+            )}
+          </NavLink>
+        ))}
+      </nav>
 
       <div className="mt-auto border-t border-cohere-hairline pt-lg">
         <button
@@ -57,9 +59,9 @@ export default function SideNav() {
           onClick={() => {
             void adminApi.auth.logout().then(() => location.assign("/login"));
           }}
-          className="flex items-center gap-md rounded-lg px-md py-sm font-label-mono text-cohere-on-surface-variant transition-colors hover:bg-cohere-surface-variant focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue"
+          className="flex items-center gap-sm rounded-lg px-sm py-xs font-label-mono text-cohere-on-surface-variant transition-colors hover:bg-cohere-surface-variant hover:text-cohere-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cohere-focus-blue"
         >
-          <MaterialIcon name="logout" />
+          <MaterialIcon name="logout" size={20} />
           退出登录
         </button>
       </div>

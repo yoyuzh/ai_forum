@@ -3,19 +3,21 @@
 // enforced by Validate at startup.
 package config
 
+const DefaultAIBaseURL = "https://api.openai.com"
+
 // Config mirrors the configuration shape fixed by architecture §14.2.
 type Config struct {
-	Server       ServerConfig       `mapstructure:"server"`
-	MySQL        MySQLConfig        `mapstructure:"mysql"`
-	Redis        RedisConfig        `mapstructure:"redis"`
-	RabbitMQ     RabbitMQConfig     `mapstructure:"rabbitmq"`
+	Server        ServerConfig        `mapstructure:"server"`
+	MySQL         MySQLConfig         `mapstructure:"mysql"`
+	Redis         RedisConfig         `mapstructure:"redis"`
+	RabbitMQ      RabbitMQConfig      `mapstructure:"rabbitmq"`
 	Elasticsearch ElasticsearchConfig `mapstructure:"elasticsearch"`
-	JWT          JWTConfig          `mapstructure:"jwt"`
-	InternalAPI  InternalAPIConfig  `mapstructure:"internal_api"`
-	AI           AIConfig           `mapstructure:"ai"`
-	Worker       WorkerConfig       `mapstructure:"worker"`
-	HotScore     HotScoreConfig     `mapstructure:"hot_score"`
-	Log          LogConfig          `mapstructure:"log"`
+	JWT           JWTConfig           `mapstructure:"jwt"`
+	InternalAPI   InternalAPIConfig   `mapstructure:"internal_api"`
+	AI            AIConfig            `mapstructure:"ai"`
+	Worker        WorkerConfig        `mapstructure:"worker"`
+	HotScore      HotScoreConfig      `mapstructure:"hot_score"`
+	Log           LogConfig           `mapstructure:"log"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -64,6 +66,7 @@ type InternalAPIConfig struct {
 // AIConfig holds the AI provider client settings.
 type AIConfig struct {
 	Provider         string `mapstructure:"provider"`
+	BaseURL          string `mapstructure:"base_url"`
 	Model            string `mapstructure:"model"`
 	APIKey           string `mapstructure:"api_key"`
 	MaxConcurrency   int    `mapstructure:"max_concurrency"`

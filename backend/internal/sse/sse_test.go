@@ -61,7 +61,7 @@ func TestEventsHandlerStreamsPublishedEvent(t *testing.T) {
 }
 
 func TestStatusHandlerReturnsRunningAndCompletedCounts(t *testing.T) {
-	store := statusStore{completed: 1, running: 1}
+	store := statusStore{completed: 1, running: 1, failed: 1}
 	handler := NewStatusHandler(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/posts/42/ai-status", nil)
 	req.SetPathValue("postId", "42")
@@ -73,7 +73,24 @@ func TestStatusHandlerReturnsRunningAndCompletedCounts(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{`"completedCount":1`, `"runningCount":1`, `"overallStatus":"RUNNING"`} {
+	for _, want := range []string{`"completedCount":1`, `"runningCount":1`, `"failedCount":1`, `"overallStatus":"RUNNING"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body missing %s: %s", want, body)
+		}
+	}
+}
+
+func TestStatusHandlerReturnsFailedWhenOnlyFailuresExist(t *testing.T) {
+	store := statusStore{failed: 1}
+	handler := NewStatusHandler(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/posts/42/ai-status", nil)
+	req.SetPathValue("postId", "42")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	for _, want := range []string{`"failedCount":1`, `"overallStatus":"FAILED"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %s: %s", want, body)
 		}
@@ -83,8 +100,9 @@ func TestStatusHandlerReturnsRunningAndCompletedCounts(t *testing.T) {
 type statusStore struct {
 	completed int
 	running   int
+	failed    int
 }
 
 func (s statusStore) AIStatus(context.Context, int64) (Status, error) {
-	return Status{CompletedCount: s.completed, RunningCount: s.running}, nil
+	return Status{CompletedCount: s.completed, RunningCount: s.running, FailedCount: s.failed}, nil
 }

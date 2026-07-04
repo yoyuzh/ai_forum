@@ -10,29 +10,30 @@ import (
 // vars override file values — there is no blanket AutomaticEnv, so unrelated
 // env vars cannot silently leak into config (architecture §14.1, design D2).
 var envBindings = map[string]string{
-	"SERVER_PORT":          "server.port",
-	"SERVER_MODE":          "server.mode",
-	"MYSQL_HOST":           "mysql.host",
-	"MYSQL_PORT":           "mysql.port",
-	"MYSQL_USERNAME":       "mysql.username",
-	"MYSQL_PASSWORD":       "mysql.password",
-	"MYSQL_DATABASE":       "mysql.database",
-	"REDIS_ADDR":           "redis.addr",
-	"REDIS_PASSWORD":       "redis.password",
+	"SERVER_PORT":           "server.port",
+	"SERVER_MODE":           "server.mode",
+	"MYSQL_HOST":            "mysql.host",
+	"MYSQL_PORT":            "mysql.port",
+	"MYSQL_USERNAME":        "mysql.username",
+	"MYSQL_PASSWORD":        "mysql.password",
+	"MYSQL_DATABASE":        "mysql.database",
+	"REDIS_ADDR":            "redis.addr",
+	"REDIS_PASSWORD":        "redis.password",
 	"REDIS_DB":              "redis.db",
-	"RABBITMQ_URL":         "rabbitmq.url",
-	"ES_ADDRESSES":         "elasticsearch.addresses",
-	"JWT_SECRET":           "jwt.secret",
-	"JWT_EXPIRE_HOURS":     "jwt.expire_hours",
-	"INTERNAL_API_TOKEN":   "internal_api.token",
-	"AI_PROVIDER":          "ai.provider",
-	"AI_MODEL":             "ai.model",
-	"AI_API_KEY":           "ai.api_key",
-	"AI_MAX_CONCURRENCY":   "ai.max_concurrency",
+	"RABBITMQ_URL":          "rabbitmq.url",
+	"ES_ADDRESSES":          "elasticsearch.addresses",
+	"JWT_SECRET":            "jwt.secret",
+	"JWT_EXPIRE_HOURS":      "jwt.expire_hours",
+	"INTERNAL_API_TOKEN":    "internal_api.token",
+	"AI_PROVIDER":           "ai.provider",
+	"AI_BASE_URL":           "ai.base_url",
+	"AI_MODEL":              "ai.model",
+	"AI_API_KEY":            "ai.api_key",
+	"AI_MAX_CONCURRENCY":    "ai.max_concurrency",
 	"AI_REQUEST_PER_SECOND": "ai.request_per_second",
-	"AI_BURST":             "ai.burst",
-	"LOG_LEVEL":            "log.level",
-	"LOG_ENCODING":         "log.encoding",
+	"AI_BURST":              "ai.burst",
+	"LOG_LEVEL":             "log.level",
+	"LOG_ENCODING":          "log.encoding",
 }
 
 // Load reads the YAML file at path, applies defaults, overlays file values,
@@ -75,6 +76,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("mysql.port", 3306)
 	v.SetDefault("redis.db", 0)
 	v.SetDefault("jwt.expire_hours", 168)
+	v.SetDefault("ai.base_url", DefaultAIBaseURL)
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.encoding", "json")
 }

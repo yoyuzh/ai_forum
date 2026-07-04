@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { setAuthToken } from "../api/auth";
+import { defaultUserAvatars } from "../assets/brand";
 import type { UserProfile } from "../api/types";
 
 interface UserStore {
@@ -22,7 +23,7 @@ const INITIAL_USER: UserProfile = {
   username: "user_developer_1",
   nickname: "Nova_Architect",
   email: "nova@research.ai",
-  avatar: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='32' fill='%23b8ede0'/%3E%3Ctext x='32' y='38' text-anchor='middle' font-size='20' font-family='Arial' fill='%2335675d'%3ENU%3C/text%3E%3C/svg%3E",
+  avatar: defaultUserAvatars[1],
   bio: "致力于研究大型语言模型的涌现行为。热衷于 AI 伦理，并优化系统提示词以获得确定性输出。",
   role: "资深研究员",
   uid: "849201",

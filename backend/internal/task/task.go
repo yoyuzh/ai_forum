@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/hibiken/asynq"
 
@@ -34,6 +35,11 @@ const (
 	SendNotification       = "send_notification"
 	RefreshHotScore        = "refresh_hot_score"
 	CleanupProcessedEvents = "cleanup_processed_events"
+)
+
+const (
+	GenerateAIReplyMaxRetries = 3
+	GenerateAIReplyRetryDelay = 10 * time.Minute
 )
 
 // CronContractInfo records owner metadata for P5 ownership tests.
@@ -115,11 +121,21 @@ func (e *GenerateAIReplyEnqueuer) EnqueueGenerateAIReply(ctx context.Context, pa
 		payload.TriggerType = "AUTO"
 	}
 	if enqueuer, ok := e.enqueuer.(optionEnqueuer); ok {
-		err := enqueuer.EnqueueWithOptions(ctx, GenerateAIReply, payload, asynq.TaskID(generateAIReplyTaskID(payload)))
+		err := enqueuer.EnqueueWithOptions(ctx, GenerateAIReply, payload, generateAIReplyOptions(payload, "")...)
 		if errors.Is(err, asynq.ErrTaskIDConflict) {
 			return nil
 		}
 		return err
+	}
+	return e.enqueuer.Enqueue(ctx, GenerateAIReply, payload)
+}
+
+func (e *GenerateAIReplyEnqueuer) EnqueueGenerateAIReplyRetry(ctx context.Context, payload GenerateAIReplyPayload, retryKey string) error {
+	if payload.TriggerType == "" {
+		payload.TriggerType = "AUTO"
+	}
+	if enqueuer, ok := e.enqueuer.(optionEnqueuer); ok {
+		return enqueuer.EnqueueWithOptions(ctx, GenerateAIReply, payload, generateAIReplyOptions(payload, "retry:"+retryKey)...)
 	}
 	return e.enqueuer.Enqueue(ctx, GenerateAIReply, payload)
 }
@@ -178,7 +194,8 @@ func NewAsynqClient(cfg config.RedisConfig) *asynq.Client {
 // concurrency is a P5/P6 concern.
 func NewAsynqServer(cfg config.RedisConfig) *asynq.Server {
 	return asynq.NewServer(redisClientOpt(cfg), asynq.Config{
-		Concurrency: p2Concurrency,
+		Concurrency:    p2Concurrency,
+		RetryDelayFunc: retryDelay,
 	})
 }
 
@@ -282,6 +299,21 @@ func generateAIReplyTaskID(payload GenerateAIReplyPayload) string {
 		parentID = *payload.ParentCommentID
 	}
 	return fmt.Sprintf("%s:%d:%d:%d:%s", GenerateAIReply, payload.PostID, parentID, payload.AIAgentID, payload.TriggerType)
+}
+
+func generateAIReplyOptions(payload GenerateAIReplyPayload, suffix string) []asynq.Option {
+	taskID := generateAIReplyTaskID(payload)
+	if suffix != "" {
+		taskID += ":" + suffix
+	}
+	return []asynq.Option{asynq.TaskID(taskID), asynq.MaxRetry(GenerateAIReplyMaxRetries)}
+}
+
+func retryDelay(n int, err error, t *asynq.Task) time.Duration {
+	if t.Type() == GenerateAIReply {
+		return GenerateAIReplyRetryDelay
+	}
+	return asynq.DefaultRetryDelayFunc(n, err, t)
 }
 
 func judgeAIFollowupTaskID(payload JudgeAIFollowupPayload) string {

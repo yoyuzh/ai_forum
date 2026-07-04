@@ -80,6 +80,43 @@ export interface AIAgent {
   active: boolean;
 }
 
+export interface AIChatMessage {
+  id: number;
+  sessionId: number;
+  role: "user" | "assistant";
+  content: string;
+  errorMessage?: string | null;
+  createdAt: string;
+}
+
+export interface AIChatSession {
+  id: number;
+  userId: number;
+  aiAgentId: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AIChat {
+  session: AIChatSession;
+  agent: AIAgent;
+  messages: AIChatMessage[];
+}
+
+export interface AIChatSendResult {
+  session: AIChatSession;
+  userMessage: AIChatMessage;
+  assistantMessage?: AIChatMessage;
+}
+
+export interface AIChatSessionSummary {
+  session: AIChatSession;
+  agent: AIAgent;
+  lastMessage: string;
+  messageCount: number;
+}
+
 export type TaskStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
 export interface AIReplyTask {
@@ -210,7 +247,9 @@ export interface NotificationItem {
 export interface AIStatusSnapshot {
   completedCount: number;
   runningCount: number;
-  overallStatus: "IDLE" | "RUNNING" | "COMPLETED";
+  failedCount: number;
+  retryableCount: number;
+  overallStatus: "IDLE" | "RUNNING" | "COMPLETED" | "FAILED";
 }
 
 export interface ApiClient {
@@ -249,6 +288,11 @@ export interface ApiClient {
     get: (id: number) => Promise<AIAgent>;
     update: (id: number, updates: Partial<AIAgent>) => Promise<AIAgent>;
   };
+  chat: {
+    list: () => Promise<AIChatSessionSummary[]>;
+    get: (agentId: number) => Promise<AIChat>;
+    sendMessage: (agentId: number, content: string) => Promise<AIChatSendResult>;
+  };
   tasks: { list: () => Promise<AIReplyTask[]> };
   decisionLogs: {
     list: () => Promise<AIDecisionLog[]>;
@@ -278,5 +322,6 @@ export interface ApiClient {
   };
   aiStatus: {
     get: (postId: number) => Promise<AIStatusSnapshot>;
+    retry: (postId: number) => Promise<{ retried: number }>;
   };
 }

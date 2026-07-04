@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hibiken/asynq"
 )
@@ -177,6 +178,29 @@ func TestGenerateAIReplyEnqueuerUsesTaskContract(t *testing.T) {
 	}
 	if enqueuer.taskID != "generate_ai_reply:42:77:1001:MENTION" {
 		t.Fatalf("task id = %q, want deterministic generate_ai_reply:42:77:1001:MENTION", enqueuer.taskID)
+	}
+	if enqueuer.maxRetry != GenerateAIReplyMaxRetries {
+		t.Fatalf("max retry = %d, want %d", enqueuer.maxRetry, GenerateAIReplyMaxRetries)
+	}
+}
+
+func TestGenerateAIReplyRetryUsesDistinctTaskID(t *testing.T) {
+	enqueuer := &recordingEnqueuer{}
+	reply := NewGenerateAIReplyEnqueuer(enqueuer)
+
+	if err := reply.EnqueueGenerateAIReplyRetry(context.Background(), GenerateAIReplyPayload{PostID: 42, AIAgentID: 1001, TriggerType: "AUTO"}, "7:2"); err != nil {
+		t.Fatal(err)
+	}
+
+	if enqueuer.taskID != "generate_ai_reply:42:0:1001:AUTO:retry:7:2" {
+		t.Fatalf("task id = %q, want retry suffix", enqueuer.taskID)
+	}
+}
+
+func TestGenerateAIReplyRetryDelayIsTenMinutes(t *testing.T) {
+	got := retryDelay(1, errors.New("boom"), asynq.NewTask(GenerateAIReply, nil))
+	if got != 10*time.Minute {
+		t.Fatalf("retry delay = %s, want 10m", got)
 	}
 }
 

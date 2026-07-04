@@ -1,13 +1,24 @@
-import { useQuery } from "@tanstack/react-query";
-import { Table, Tag } from "antd";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Select, Table, Tag, App as AntdApp } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { adminApi } from "../api/client";
 import { AdminPost } from "../api/types";
 
 export default function PostsManagePage() {
+  const queryClient = useQueryClient();
+  const { message } = AntdApp.useApp();
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ["adminPosts"],
     queryFn: adminApi.posts.list,
+  });
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: AdminPost["status"] }) =>
+      adminApi.posts.updateStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminPosts"] });
+      message.success("帖子状态已更新");
+    },
+    onError: () => message.error("帖子状态更新失败"),
   });
 
   const columns: ColumnsType<AdminPost> = [
@@ -41,6 +52,24 @@ export default function PostsManagePage() {
         <Tag color={status === "published" ? "green" : "default"}>
           {status === "published" ? "已发布" : status === "review" ? "审核中" : "草稿"}
         </Tag>
+      ),
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 150,
+      render: (_: unknown, record: AdminPost) => (
+        <Select
+          size="small"
+          value={record.status}
+          className="w-32"
+          disabled={statusMutation.isPending}
+          onChange={(status) => statusMutation.mutate({ id: record.id, status })}
+          options={[
+            { value: "NORMAL", label: "发布" },
+            { value: "HIDDEN", label: "隐藏" },
+          ]}
+        />
       ),
     },
     { title: "发布时间", dataIndex: "createdAt", width: 120 },

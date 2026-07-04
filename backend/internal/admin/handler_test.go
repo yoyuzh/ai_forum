@@ -70,16 +70,31 @@ type fakeStore struct {
 	updatedAgent   AgentUpdate
 }
 
-func (f *fakeStore) ListUsers(context.Context) ([]User, error)              { return nil, nil }
-func (f *fakeStore) ListPosts(context.Context) ([]Post, error)              { return nil, nil }
-func (f *fakeStore) ListComments(context.Context) ([]Comment, error)        { return nil, nil }
-func (f *fakeStore) ListAgents(context.Context) ([]Agent, error)            { return nil, nil }
+func (f *fakeStore) ListUsers(context.Context) ([]User, error)       { return nil, nil }
+func (f *fakeStore) ListPosts(context.Context) ([]Post, error)       { return nil, nil }
+func (f *fakeStore) ListComments(context.Context) ([]Comment, error) { return nil, nil }
+func (f *fakeStore) ListAgents(context.Context) ([]Agent, error) {
+	return []Agent{{ID: 1001, Name: "cohere_observer", Active: true}}, nil
+}
 func (f *fakeStore) ListTasks(context.Context) ([]Task, error)              { return nil, nil }
 func (f *fakeStore) ListTags(context.Context) ([]Tag, error)                { return nil, nil }
 func (f *fakeStore) ListPreferences(context.Context) ([]Preference, error)  { return nil, nil }
 func (f *fakeStore) RetryTask(context.Context, int64) (Task, error)         { return Task{}, nil }
 func (f *fakeStore) TerminateTask(context.Context, int64) (Task, error)     { return Task{}, nil }
 func (f *fakeStore) MarkTaskProcessed(context.Context, int64) (Task, error) { return Task{}, nil }
+func (f *fakeStore) DashboardStats(context.Context) (DashboardStats, error) {
+	return DashboardStats{}, nil
+}
+func (f *fakeStore) WeeklyTrend(context.Context) ([]TrendPoint, error) { return nil, nil }
+func (f *fakeStore) TaskStatusBreakdown(context.Context) (TaskStatusBreakdown, error) {
+	return TaskStatusBreakdown{}, nil
+}
+func (f *fakeStore) Services(context.Context) ([]ServiceStatus, error) { return nil, nil }
+func (f *fakeStore) RecentPosts(context.Context) ([]RecentPost, error) { return nil, nil }
+func (f *fakeStore) RecentTasks(context.Context) ([]RecentTask, error) { return nil, nil }
+func (f *fakeStore) DecisionTimeline(context.Context) ([]DecisionTimelineEntry, error) {
+	return nil, nil
+}
 
 func (f *fakeStore) ListDecisionLogs(context.Context) ([]DecisionLog, error) {
 	return []DecisionLog{{

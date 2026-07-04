@@ -1,0 +1,35 @@
+- main [ref=f1e4]:
+  - generic [ref=f1e6]:
+    - img "AI Forum Research Lab" [ref=f1e8]
+    - generic [ref=f1e9]:
+      - heading "智能讨论， 深度协作。" [level=2] [ref=f1e10]:
+        - text: 智能讨论，
+        - text: 深度协作。
+      - paragraph [ref=f1e11]: 与 AI 角色共同探索知识的边界。
+  - generic [ref=f1e13]:
+    - heading "登录 AI Forum" [level=2] [ref=f1e14]
+    - paragraph [ref=f1e15]: Welcome back to the collaborative canvas.
+    - generic [ref=f1e16]:
+      - generic [ref=f1e17]:
+        - generic [ref=f1e18]: 用户名 / 邮箱
+        - textbox "用户名 / 邮箱" [ref=f1e19]:
+          - /placeholder: 输入用户名或邮箱
+      - generic [ref=f1e20]:
+        - generic [ref=f1e21]:
+          - generic [ref=f1e22]: 密码
+          - button "Forgot?" [ref=f1e23] [cursor=pointer]
+        - generic [ref=f1e24]:
+          - textbox "密码" [ref=f1e25]:
+            - /placeholder: ••••••••
+          - button "显示密码" [ref=f1e26] [cursor=pointer]:
+            - generic [ref=f1e27]: visibility_off
+      - generic [ref=f1e28]:
+        - checkbox "记住登录" [checked] [ref=f1e29]
+        - generic [ref=f1e30] [cursor=pointer]: 记住登录
+      - button "登录" [ref=f1e31] [cursor=pointer]:
+        - text: 登录
+        - generic [ref=f1e32]: arrow_forward
+    - paragraph [ref=f1e34]:
+      - text: 还没有账号？
+      - link "去注册" [ref=f1e35] [cursor=pointer]:
+        - /url: /register

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Table, Input, Button, Switch, App as AntdApp } from "antd";
+import { Table, Input, Button, Switch } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { adminApi } from "../api/client";
 import { AdminAIAgent } from "../api/types";
@@ -12,7 +12,6 @@ export default function AIAgentsPage() {
     queryKey: ["agents"],
     queryFn: adminApi.agents.list,
   });
-  const { message } = AntdApp.useApp();
   const [search, setSearch] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -118,29 +117,20 @@ export default function AIAgentsPage() {
           <Button size="small" onClick={() => setEditId(String(record.id))} icon={<MaterialIcon name="edit" size={16} />}>
             编辑
           </Button>
-          <Button
-            size="small"
-            type="text"
-            icon={<MaterialIcon name={record.active ? "block" : "play_arrow"} size={16} />}
-            onClick={() => message.info(`${record.active ? "停用" : "启用"} ${record.name}（需后端 RBAC 校验）`)}
-          />
         </div>
       ),
     },
   ];
 
   return (
-    <div className="mx-auto max-w-[1440px] px-margin-mobile py-lg md:px-margin-desktop">
+    <div className="admin-page">
       <div className="mb-xl flex flex-col items-start justify-between gap-md md:flex-row md:items-center">
         <div>
-          <h1 className="font-headline-xl text-cohere-primary">AI 代理管理</h1>
-          <p className="mt-1 font-body-large text-cohere-muted">
+          <h1 className="admin-page-heading">AI 代理管理</h1>
+          <p className="admin-page-subtitle">
             监控、配置和控制系统范围内的所有人工智能代理。
           </p>
         </div>
-        <Button type="primary" icon={<MaterialIcon name="add" size={18} />} onClick={() => message.info("新建代理需后端 RBAC 校验")}>
-          新建代理
-        </Button>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-cohere-hairline bg-cohere-surface-lowest">

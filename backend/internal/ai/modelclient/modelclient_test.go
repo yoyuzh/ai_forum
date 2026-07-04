@@ -18,12 +18,13 @@ import (
 func TestBuildPromptIncludesPersonaAndPost(t *testing.T) {
 	prompt := BuildPrompt(PromptInput{
 		AgentName:     "cohere_observer",
+		SystemPrompt:  "你是白总结。",
 		PostTitle:     "Should AI reply?",
 		PostContent:   "Discuss the tradeoffs.",
 		ParentContent: "Parent context",
 	})
 
-	for _, want := range []string{"cohere_observer", "Should AI reply?", "Discuss the tradeoffs.", "Parent context"} {
+	for _, want := range []string{"你是白总结。", "Should AI reply?", "Discuss the tradeoffs.", "Parent context"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt missing %q: %s", want, prompt)
 		}
@@ -112,12 +113,16 @@ func fieldsString(fields map[string]any) string {
 
 func TestOpenAICompatibleClientPostsChatCompletion(t *testing.T) {
 	var gotPath, gotAuth, gotModel string
+	var gotMaxTokens int
+	var gotTemperature float64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotAuth = r.Header.Get("Authorization")
 		var body struct {
-			Model    string `json:"model"`
-			Messages []struct {
+			Model       string  `json:"model"`
+			MaxTokens   int     `json:"max_tokens"`
+			Temperature float64 `json:"temperature"`
+			Messages    []struct {
 				Role    string `json:"role"`
 				Content string `json:"content"`
 			} `json:"messages"`
@@ -126,7 +131,9 @@ func TestOpenAICompatibleClientPostsChatCompletion(t *testing.T) {
 			t.Fatal(err)
 		}
 		gotModel = body.Model
-		if len(body.Messages) != 1 || body.Messages[0].Content != "hello" {
+		gotMaxTokens = body.MaxTokens
+		gotTemperature = body.Temperature
+		if len(body.Messages) != 2 || body.Messages[0].Role != "system" || body.Messages[0].Content != "sys" || body.Messages[1].Content != "hello" {
 			t.Fatalf("messages = %#v", body.Messages)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -135,7 +142,8 @@ func TestOpenAICompatibleClientPostsChatCompletion(t *testing.T) {
 	defer server.Close()
 
 	client := NewOpenAICompatibleClient(server.URL, "test-key", "gpt-test", server.Client())
-	got, err := client.Generate(context.Background(), Request{Prompt: "hello"})
+	temp := 0.1
+	got, err := client.Generate(context.Background(), Request{SystemPrompt: "sys", Prompt: "hello", MaxTokens: 300, Temperature: &temp})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,5 +153,8 @@ func TestOpenAICompatibleClientPostsChatCompletion(t *testing.T) {
 	}
 	if gotPath != "/v1/chat/completions" || gotAuth != "Bearer test-key" || gotModel != "gpt-test" {
 		t.Fatalf("request path/auth/model = %s/%s/%s", gotPath, gotAuth, gotModel)
+	}
+	if gotMaxTokens != 300 || gotTemperature != 0.1 {
+		t.Fatalf("params = %d/%f, want 300/0.1", gotMaxTokens, gotTemperature)
 	}
 }

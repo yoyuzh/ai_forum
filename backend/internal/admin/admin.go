@@ -46,6 +46,7 @@ type Comment struct {
 type Agent struct {
 	ID                 int64   `json:"id" db:"id"`
 	Name               string  `json:"name" db:"name"`
+	SystemPrompt       string  `json:"systemPrompt" db:"system_prompt"`
 	ReplyThreshold     float64 `json:"replyThreshold" db:"reply_threshold"`
 	ActivityLevel      float64 `json:"activityLevel" db:"activity_level"`
 	AllowAutoReply     bool    `json:"allowAutoReply" db:"allow_auto_reply"`
@@ -107,9 +108,77 @@ type Preference struct {
 	CreatedAt string  `json:"createdAt" db:"created_at"`
 }
 
+type PublicAgent struct {
+	ID          int64    `json:"id"`
+	Name        string   `json:"name"`
+	DisplayName string   `json:"displayName"`
+	Avatar      string   `json:"avatar"`
+	Icon        string   `json:"icon"`
+	Description string   `json:"description"`
+	Traits      []string `json:"traits"`
+	Specialties []string `json:"specialties"`
+	Active      bool     `json:"active"`
+}
+
+type PublicActivity struct {
+	ID           int64  `json:"id"`
+	AgentName    string `json:"agentName"`
+	AgentAvatar  string `json:"agentAvatar"`
+	Action       string `json:"action"`
+	Target       string `json:"target"`
+	TargetID     int64  `json:"targetId"`
+	RelativeTime string `json:"relativeTime"`
+}
+
+type DashboardStats struct {
+	TotalUsers   int64 `json:"totalUsers" db:"total_users"`
+	TotalPosts   int64 `json:"totalPosts" db:"total_posts"`
+	AIReplies    int64 `json:"aiReplies" db:"ai_replies"`
+	TodayAITasks int64 `json:"todayAiTasks" db:"today_ai_tasks"`
+	FailedTasks  int64 `json:"failedTasks" db:"failed_tasks"`
+}
+
+type TrendPoint struct {
+	Label string `json:"label" db:"label"`
+	Value int64  `json:"value" db:"value"`
+}
+
+type TaskStatusBreakdown struct {
+	Success int64 `json:"success"`
+	Running int64 `json:"running"`
+	Failed  int64 `json:"failed"`
+}
+
+type ServiceStatus struct {
+	Name    string `json:"name"`
+	Metric  string `json:"metric"`
+	Healthy bool   `json:"healthy"`
+}
+
+type RecentPost struct {
+	ID           int64  `json:"id" db:"id"`
+	Title        string `json:"title" db:"title"`
+	Author       string `json:"author" db:"author"`
+	RelativeTime string `json:"relativeTime" db:"relative_time"`
+	Status       string `json:"status" db:"status"`
+}
+
+type RecentTask struct {
+	ID     int64  `json:"id" db:"id"`
+	Label  string `json:"label" db:"label"`
+	Icon   string `json:"icon"`
+	Status string `json:"status" db:"status"`
+}
+
+type DecisionTimelineEntry struct {
+	Time    string `json:"time" db:"time"`
+	Message string `json:"message" db:"message"`
+}
+
 type AgentUpdate struct {
 	ReplyThreshold     *float64 `json:"replyThreshold"`
 	ActivityLevel      *float64 `json:"activityLevel"`
+	SystemPrompt       *string  `json:"systemPrompt"`
 	AllowAutoReply     *bool    `json:"allowAutoReply"`
 	AllowMentionReply  *bool    `json:"allowMentionReply"`
 	AllowFollowupReply *bool    `json:"allowFollowupReply"`
@@ -117,6 +186,13 @@ type AgentUpdate struct {
 }
 
 type Store interface {
+	DashboardStats(context.Context) (DashboardStats, error)
+	WeeklyTrend(context.Context) ([]TrendPoint, error)
+	TaskStatusBreakdown(context.Context) (TaskStatusBreakdown, error)
+	Services(context.Context) ([]ServiceStatus, error)
+	RecentPosts(context.Context) ([]RecentPost, error)
+	RecentTasks(context.Context) ([]RecentTask, error)
+	DecisionTimeline(context.Context) ([]DecisionTimelineEntry, error)
 	ListUsers(context.Context) ([]User, error)
 	ListPosts(context.Context) ([]Post, error)
 	ListComments(context.Context) ([]Comment, error)
@@ -163,6 +239,119 @@ func (h *Handler) ListTags(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) ListPreferences(w http.ResponseWriter, r *http.Request) {
 	h.list(w, r, func(ctx context.Context) (any, error) { return h.store.ListPreferences(ctx) })
+}
+
+func (h *Handler) ListPublicAgents(w http.ResponseWriter, r *http.Request) {
+	agents, err := h.store.ListAgents(r.Context())
+	if err != nil {
+		http.Error(w, "list agents", http.StatusInternalServerError)
+		return
+	}
+	out := make([]PublicAgent, 0, len(agents))
+	for _, agent := range agents {
+		if !agent.Active {
+			continue
+		}
+		out = append(out, publicAgent(agent))
+	}
+	writeJSON(w, out)
+}
+
+func (h *Handler) ListPostDecisionLogs(w http.ResponseWriter, r *http.Request) {
+	postID, ok := pathInt64(w, r, "postId")
+	if !ok {
+		return
+	}
+	logs, err := h.store.ListDecisionLogs(r.Context())
+	if err != nil {
+		http.Error(w, "list decision logs", http.StatusInternalServerError)
+		return
+	}
+	out := make([]DecisionLog, 0, len(logs))
+	for _, log := range logs {
+		if log.PostID == postID {
+			out = append(out, log)
+		}
+	}
+	writeJSON(w, out)
+}
+
+func (h *Handler) ListPublicDecisionLogs(w http.ResponseWriter, r *http.Request) {
+	h.ListDecisionLogs(w, r)
+}
+
+func (h *Handler) ListPostTasks(w http.ResponseWriter, r *http.Request) {
+	postID, ok := pathInt64(w, r, "postId")
+	if !ok {
+		return
+	}
+	tasks, err := h.store.ListTasks(r.Context())
+	if err != nil {
+		http.Error(w, "list ai tasks", http.StatusInternalServerError)
+		return
+	}
+	out := make([]Task, 0, len(tasks))
+	for _, task := range tasks {
+		if task.PostID == postID {
+			out = append(out, task)
+		}
+	}
+	writeJSON(w, out)
+}
+
+func (h *Handler) ListPublicTasks(w http.ResponseWriter, r *http.Request) {
+	tasks, err := h.store.ListTasks(r.Context())
+	if err != nil {
+		http.Error(w, "list ai tasks", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, tasks)
+}
+
+func (h *Handler) ListActivities(w http.ResponseWriter, r *http.Request) {
+	logs, err := h.store.ListDecisionLogs(r.Context())
+	if err != nil {
+		http.Error(w, "list ai activity", http.StatusInternalServerError)
+		return
+	}
+	out := make([]PublicActivity, 0, len(logs))
+	for _, log := range logs {
+		out = append(out, PublicActivity{
+			ID:           log.ID,
+			AgentName:    log.AIAgentName,
+			AgentAvatar:  "",
+			Action:       log.Decision,
+			Target:       "post",
+			TargetID:     log.PostID,
+			RelativeTime: log.CreatedAt,
+		})
+		if len(out) == 20 {
+			break
+		}
+	}
+	writeJSON(w, out)
+}
+
+func (h *Handler) DashboardStats(w http.ResponseWriter, r *http.Request) {
+	h.list(w, r, func(ctx context.Context) (any, error) { return h.store.DashboardStats(ctx) })
+}
+func (h *Handler) WeeklyTrend(w http.ResponseWriter, r *http.Request) {
+	h.list(w, r, func(ctx context.Context) (any, error) { return h.store.WeeklyTrend(ctx) })
+}
+func (h *Handler) TaskStatusBreakdown(w http.ResponseWriter, r *http.Request) {
+	h.list(w, r, func(ctx context.Context) (any, error) { return h.store.TaskStatusBreakdown(ctx) })
+}
+func (h *Handler) Services(w http.ResponseWriter, r *http.Request) {
+	h.list(w, r, func(ctx context.Context) (any, error) { return h.store.Services(ctx) })
+}
+func (h *Handler) RecentPosts(w http.ResponseWriter, r *http.Request) {
+	h.list(w, r, func(ctx context.Context) (any, error) { return h.store.RecentPosts(ctx) })
+}
+func (h *Handler) RecentTasks(w http.ResponseWriter, r *http.Request) {
+	h.list(w, r, func(ctx context.Context) (any, error) { return h.store.RecentTasks(ctx) })
+}
+func (h *Handler) DecisionTimeline(w http.ResponseWriter, r *http.Request) {
+	h.list(w, r, func(ctx context.Context) (any, error) { return h.store.DecisionTimeline(ctx) })
 }
 
 func (h *Handler) Permissions(w http.ResponseWriter, r *http.Request) {
@@ -274,6 +463,109 @@ func NewSQLStore(db *sqlx.DB) *SQLStore {
 	return &SQLStore{db: db}
 }
 
+func (s *SQLStore) DashboardStats(ctx context.Context) (DashboardStats, error) {
+	var row DashboardStats
+	err := s.db.GetContext(ctx, &row, `
+		SELECT
+			(SELECT COUNT(*) FROM users) AS total_users,
+			(SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL) AS total_posts,
+			(SELECT COALESCE(SUM(ai_reply_count), 0) FROM posts WHERE deleted_at IS NULL) AS ai_replies,
+			(SELECT COUNT(*) FROM ai_reply_tasks WHERE DATE(created_at) = UTC_DATE()) AS today_ai_tasks,
+			(SELECT COUNT(*) FROM ai_reply_tasks WHERE status = 'FAILED') AS failed_tasks`)
+	return row, err
+}
+
+func (s *SQLStore) WeeklyTrend(ctx context.Context) ([]TrendPoint, error) {
+	var rows []TrendPoint
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT DATE_FORMAT(created_at, '%m-%d') AS label, COUNT(*) AS value
+		FROM posts
+		WHERE deleted_at IS NULL AND created_at >= UTC_TIMESTAMP() - INTERVAL 6 DAY
+		GROUP BY DATE(created_at), DATE_FORMAT(created_at, '%m-%d')
+		ORDER BY DATE(created_at)`)
+	if rows == nil {
+		rows = []TrendPoint{}
+	}
+	return rows, err
+}
+
+func (s *SQLStore) TaskStatusBreakdown(ctx context.Context) (TaskStatusBreakdown, error) {
+	var rows []struct {
+		Status string `db:"status"`
+		Count  int64  `db:"count"`
+	}
+	if err := s.db.SelectContext(ctx, &rows, `SELECT status, COUNT(*) AS count FROM ai_reply_tasks GROUP BY status`); err != nil {
+		return TaskStatusBreakdown{}, err
+	}
+	var out TaskStatusBreakdown
+	for _, row := range rows {
+		switch row.Status {
+		case "COMPLETED":
+			out.Success = row.Count
+		case "PROCESSING", "PENDING":
+			out.Running += row.Count
+		case "FAILED":
+			out.Failed = row.Count
+		}
+	}
+	return out, nil
+}
+
+func (s *SQLStore) Services(ctx context.Context) ([]ServiceStatus, error) {
+	stats, err := s.DashboardStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return []ServiceStatus{
+		{Name: "MySQL", Metric: "Live", Healthy: true},
+		{Name: "Posts", Metric: strconv.FormatInt(stats.TotalPosts, 10), Healthy: true},
+		{Name: "AI Tasks", Metric: strconv.FormatInt(stats.TodayAITasks, 10), Healthy: stats.FailedTasks == 0},
+		{Name: "Decision Logs", Metric: strconv.FormatInt(stats.AIReplies, 10), Healthy: true},
+	}, nil
+}
+
+func (s *SQLStore) RecentPosts(ctx context.Context) ([]RecentPost, error) {
+	var rows []RecentPost
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT p.id, p.title, u.username AS author, DATE_FORMAT(p.created_at, '%Y-%m-%dT%TZ') AS relative_time,
+		       CASE WHEN p.status = 'NORMAL' THEN 'published' ELSE 'review' END AS status
+		FROM posts p JOIN users u ON u.id = p.author_id
+		WHERE p.deleted_at IS NULL
+		ORDER BY p.id DESC LIMIT 5`)
+	if rows == nil {
+		rows = []RecentPost{}
+	}
+	return rows, err
+}
+
+func (s *SQLStore) RecentTasks(ctx context.Context) ([]RecentTask, error) {
+	var rows []RecentTask
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT t.id, CONCAT(a.name, ' #', t.post_id) AS label, t.status
+		FROM ai_reply_tasks t JOIN ai_agents a ON a.id = t.ai_agent_id
+		ORDER BY t.id DESC LIMIT 5`)
+	for i := range rows {
+		rows[i].Icon = "smart_toy"
+	}
+	if rows == nil {
+		rows = []RecentTask{}
+	}
+	return rows, err
+}
+
+func (s *SQLStore) DecisionTimeline(ctx context.Context) ([]DecisionTimelineEntry, error) {
+	var rows []DecisionTimelineEntry
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT DATE_FORMAT(d.created_at, '%H:%i') AS time,
+		       CONCAT(a.name, ' ', d.decision, ' post #', d.post_id) AS message
+		FROM decision_logs d JOIN ai_agents a ON a.id = d.ai_agent_id
+		ORDER BY d.id DESC LIMIT 6`)
+	if rows == nil {
+		rows = []DecisionTimelineEntry{}
+	}
+	return rows, err
+}
+
 func (s *SQLStore) ListUsers(ctx context.Context) ([]User, error) {
 	var rows []User
 	err := s.db.SelectContext(ctx, &rows, `
@@ -313,12 +605,12 @@ func (s *SQLStore) ListComments(ctx context.Context) ([]Comment, error) {
 func (s *SQLStore) ListAgents(ctx context.Context) ([]Agent, error) {
 	var rows []Agent
 	err := s.db.SelectContext(ctx, &rows, `
-		SELECT a.id, a.name, a.reply_threshold, a.activity_level, a.allow_auto_reply, a.allow_mention,
+		SELECT a.id, a.name, COALESCE(a.system_prompt, '') AS system_prompt, a.reply_threshold, a.activity_level, a.allow_auto_reply, a.allow_mention,
 		       a.allow_followup, a.enabled, a.is_fallback, COUNT(c.id) AS reply_count,
 		       DATE_FORMAT(a.created_at, '%Y-%m-%dT%TZ') AS created_at
 		FROM ai_agents a
 		LEFT JOIN comments c ON c.ai_agent_id = a.id AND c.comment_type = 'AI' AND c.deleted_at IS NULL
-		GROUP BY a.id, a.name, a.reply_threshold, a.activity_level, a.allow_auto_reply, a.allow_mention,
+		GROUP BY a.id, a.name, COALESCE(a.system_prompt, ''), a.reply_threshold, a.activity_level, a.allow_auto_reply, a.allow_mention,
 		         a.allow_followup, a.enabled, a.is_fallback, a.created_at
 		ORDER BY a.id`)
 	return rows, err
@@ -335,6 +627,9 @@ func (s *SQLStore) UpdateAgent(ctx context.Context, id int64, update AgentUpdate
 	if update.ActivityLevel != nil {
 		current.ActivityLevel = *update.ActivityLevel
 	}
+	if update.SystemPrompt != nil {
+		current.SystemPrompt = *update.SystemPrompt
+	}
 	if update.AllowAutoReply != nil {
 		current.AllowAutoReply = *update.AllowAutoReply
 	}
@@ -349,8 +644,8 @@ func (s *SQLStore) UpdateAgent(ctx context.Context, id int64, update AgentUpdate
 	}
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE ai_agents
-		SET reply_threshold=?, activity_level=?, allow_auto_reply=?, allow_mention=?, allow_followup=?, enabled=?
-		WHERE id=?`, current.ReplyThreshold, current.ActivityLevel, current.AllowAutoReply, current.AllowMentionReply, current.AllowFollowupReply, current.Active, id)
+		SET reply_threshold=?, activity_level=?, system_prompt=?, allow_auto_reply=?, allow_mention=?, allow_followup=?, enabled=?
+		WHERE id=?`, current.ReplyThreshold, current.ActivityLevel, current.SystemPrompt, current.AllowAutoReply, current.AllowMentionReply, current.AllowFollowupReply, current.Active, id)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -360,7 +655,7 @@ func (s *SQLStore) UpdateAgent(ctx context.Context, id int64, update AgentUpdate
 func (s *SQLStore) agent(ctx context.Context, id int64) (Agent, error) {
 	var row Agent
 	err := s.db.GetContext(ctx, &row, `
-		SELECT id, name, reply_threshold, activity_level, allow_auto_reply, allow_mention,
+		SELECT id, name, COALESCE(system_prompt, '') AS system_prompt, reply_threshold, activity_level, allow_auto_reply, allow_mention,
 		       allow_followup, enabled, is_fallback, 0 AS reply_count, DATE_FORMAT(created_at, '%Y-%m-%dT%TZ') AS created_at
 		FROM ai_agents WHERE id = ?`, id)
 	return row, err
@@ -476,6 +771,27 @@ func decodeHitTags(raw string) []string {
 		}
 	}
 	return tags
+}
+
+func publicAgent(agent Agent) PublicAgent {
+	icon := "smart_toy"
+	description := "AI reply decision agent"
+	traits := []string{"decision"}
+	if agent.Fallback {
+		icon = "support_agent"
+		description = "Fallback decision agent"
+		traits = []string{"fallback"}
+	}
+	return PublicAgent{
+		ID:          agent.ID,
+		Name:        agent.Name,
+		DisplayName: agent.Name,
+		Icon:        icon,
+		Description: description,
+		Traits:      traits,
+		Specialties: []string{},
+		Active:      agent.Active,
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

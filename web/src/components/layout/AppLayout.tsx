@@ -5,7 +5,7 @@ import Footer from "./Footer";
 /** App shell shared by every user-facing page. */
 export default function AppLayout() {
   return (
-    <div className="flex min-h-screen flex-col bg-cohere-background">
+    <div className="brand-background flex min-h-screen flex-col bg-cohere-background">
       <Header />
       <Outlet />
       <Footer />

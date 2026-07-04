@@ -59,14 +59,14 @@ const provider = {
       const data = await adminApi.agents.update(String(id), variables as Record<string, unknown>);
       return { data };
     }
-    throw new Error(`update not implemented for resource ${resource}`);
+    throw new Error(`resource ${resource} is read-only`);
   },
 
   create: async () => {
-    throw new Error("create not implemented in mock data provider");
+    throw new Error("create is read-only in mock data provider");
   },
   deleteOne: async () => {
-    throw new Error("deleteOne not implemented in mock data provider");
+    throw new Error("delete is read-only in mock data provider");
   },
   getMany: async () => ({ data: [] }),
   updateMany: async () => ({ data: [] }),

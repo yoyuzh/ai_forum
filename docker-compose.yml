@@ -15,7 +15,9 @@ services:
       ES_ADDRESSES: http://elasticsearch:9200
       JWT_SECRET: local-dev-jwt-secret
       INTERNAL_API_TOKEN: local-dev-internal-token
-      AI_API_KEY: local-dev-ai-key
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.openai.com}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+      AI_API_KEY: ${AI_API_KEY:-local-dev-ai-key}
     expose:
       - "8080"
     depends_on:

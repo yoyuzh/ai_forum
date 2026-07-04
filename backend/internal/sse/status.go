@@ -31,9 +31,17 @@ func (s *SQLStatusStore) AIStatus(ctx context.Context, postID int64) (Status, er
 		switch row.Status {
 		case "SUCCESS":
 			out.CompletedCount += row.Count
-		case "PENDING", "RUNNING":
+		case "PENDING", "RUNNING", "RETRYING":
 			out.RunningCount += row.Count
+		case "FAILED":
+			out.FailedCount += row.Count
 		}
+	}
+	if err := s.db.GetContext(ctx, &out.RetryableCount, `
+		SELECT COUNT(*)
+		FROM ai_reply_tasks
+		WHERE post_id = ? AND status = 'FAILED' AND attempt_count < 3`, postID); err != nil {
+		return Status{}, err
 	}
 	return out, nil
 }

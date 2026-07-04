@@ -22,6 +22,14 @@ import type {
   AdminSession,
   AdminTag,
   AdminUser,
+  DashboardStats,
+  DecisionPostContext,
+  DecisionTimelineEntry,
+  RecentPostRow,
+  RecentTaskRow,
+  ServiceStatus,
+  TaskStatusBreakdown,
+  TrendPoint,
 } from "./types";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:19091").replace(/\/$/, "");
@@ -134,7 +142,14 @@ const mockApi = {
     markProcessed: async (id: string | number): Promise<AdminAITask> => mockApi.tasks.retry(id),
   },
   decisionLogs: { list: async (): Promise<AdminDecisionLog[]> => delay(DECISION_LOGS) },
-  posts: { list: async (): Promise<AdminPost[]> => delay(POSTS) },
+  posts: {
+    list: async (): Promise<AdminPost[]> => delay(POSTS),
+    updateStatus: async (id: string | number, status: AdminPost["status"]): Promise<void> => {
+      const post = POSTS.find((p) => String(p.id) === String(id));
+      if (post) post.status = status;
+      return delay(undefined);
+    },
+  },
   comments: { list: async () => delay([]) },
   tags: { list: async (): Promise<AdminTag[]> => delay([]) },
   preferences: { list: async (): Promise<AdminPreference[]> => delay([]) },
@@ -155,8 +170,27 @@ function agentFromBackend(row: AdminAIAgent): AdminAIAgent {
 }
 
 const realApi = {
-  dashboard: mockApi.dashboard,
-  decisionContext: mockApi.decisionContext,
+  dashboard: {
+    stats: () => http<DashboardStats>("/api/admin/dashboard/stats"),
+    weeklyTrend: () => http<TrendPoint[]>("/api/admin/dashboard/weekly-trend"),
+    taskStatusBreakdown: () => http<TaskStatusBreakdown>("/api/admin/dashboard/task-status-breakdown"),
+    services: () => http<ServiceStatus[]>("/api/admin/dashboard/services"),
+    recentPosts: () => http<RecentPostRow[]>("/api/admin/dashboard/recent-posts"),
+    recentTasks: () => http<RecentTaskRow[]>("/api/admin/dashboard/recent-tasks"),
+    decisionTimeline: () => http<DecisionTimelineEntry[]>("/api/admin/dashboard/decision-timeline"),
+  },
+  decisionContext: async (): Promise<DecisionPostContext | null> => {
+    const rows = await realApi.decisionLogs.list();
+    const first = rows[0];
+    if (!first) return null;
+    return {
+      postId: first.postId,
+      title: `Post #${first.postId}`,
+      body: first.reason,
+      tags: first.hitTags,
+      timestamp: first.createdAt,
+    };
+  },
   taskSummary: async () => {
     const rows = await http<AdminAITask[]>("/api/admin/ai-tasks");
     return {
@@ -196,7 +230,14 @@ const realApi = {
     },
   },
   users: { list: () => http<AdminUser[]>("/api/admin/users") },
-  posts: { list: () => http<AdminPost[]>("/api/admin/posts") },
+  posts: {
+    list: () => http<AdminPost[]>("/api/admin/posts"),
+    updateStatus: (id: string | number, status: AdminPost["status"]) =>
+      http<void>(`/api/admin/posts/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+  },
   comments: { list: () => http<unknown[]>("/api/admin/comments") },
   agents: {
     list: async () => (await http<AdminAIAgent[]>("/api/admin/ai-agents")).map(agentFromBackend),

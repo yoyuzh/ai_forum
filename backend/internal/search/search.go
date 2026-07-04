@@ -13,6 +13,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -158,6 +160,10 @@ type IndexStore interface {
 	EnsureIndex(context.Context) error
 	Upsert(context.Context, Document) error
 	Delete(context.Context, string) error
+}
+
+type QueryStore interface {
+	Search(context.Context, string, int) ([]int64, error)
 }
 
 type SyncHandler struct {
@@ -394,6 +400,144 @@ func (s *ESIndexStore) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("delete es document: status %d", res.StatusCode)
 	}
 	return nil
+}
+
+func (s *ESIndexStore) Search(ctx context.Context, q string, limit int) ([]int64, error) {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	body, err := json.Marshal(map[string]any{
+		"size": limit,
+		"query": map[string]any{
+			"bool": map[string]any{
+				"must": []any{map[string]any{
+					"multi_match": map[string]any{
+						"query":  q,
+						"fields": []string{"title^2", "body"},
+					},
+				}},
+				"filter": []any{map[string]any{"term": map[string]any{"type": "post"}}},
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.client.Search(s.client.Search.WithContext(ctx), s.client.Search.WithIndex(indexName), s.client.Search.WithBody(bytes.NewReader(body)))
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.IsError() {
+		return nil, fmt.Errorf("search es documents: status %d", res.StatusCode)
+	}
+	var payload struct {
+		Hits struct {
+			Hits []struct {
+				Source Document `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	seen := map[int64]bool{}
+	ids := make([]int64, 0, len(payload.Hits.Hits))
+	for _, hit := range payload.Hits.Hits {
+		if hit.Source.PostID > 0 && !seen[hit.Source.PostID] {
+			ids = append(ids, hit.Source.PostID)
+			seen[hit.Source.PostID] = true
+		}
+	}
+	return ids, nil
+}
+
+type PostResult struct {
+	ID           int64    `json:"id" db:"id"`
+	AuthorID     int64    `json:"author_id" db:"author_id"`
+	Title        string   `json:"title" db:"title"`
+	Content      string   `json:"content" db:"content"`
+	Status       string   `json:"status" db:"status"`
+	Category     string   `json:"category"`
+	Tags         []string `json:"tags"`
+	ViewCount    int64    `json:"view_count" db:"view_count"`
+	CommentCount int64    `json:"comment_count" db:"comment_count"`
+	LikeCount    int64    `json:"like_count" db:"like_count"`
+	AIReplyCount int64    `json:"ai_reply_count" db:"ai_reply_count"`
+	CreatedAt    string   `json:"created_at" db:"created_at"`
+}
+
+type QueryHandler struct {
+	db    database.DBTX
+	store QueryStore
+}
+
+func NewQueryHandler(db database.DBTX, store QueryStore) *QueryHandler {
+	return &QueryHandler{db: db, store: store}
+}
+
+func (h *QueryHandler) SearchPosts(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeJSON(w, []PostResult{})
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	ids, err := h.store.Search(r.Context(), q, limit)
+	if err != nil {
+		http.Error(w, "search unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if len(ids) == 0 {
+		writeJSON(w, []PostResult{})
+		return
+	}
+	rows, err := h.postsByID(r.Context(), ids)
+	if err != nil {
+		http.Error(w, "search posts", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, rows)
+}
+
+func (h *QueryHandler) postsByID(ctx context.Context, ids []int64) ([]PostResult, error) {
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	var rows []PostResult
+	err := h.db.SelectContext(ctx, &rows, fmt.Sprintf(`
+		SELECT id, author_id, title, content, status, view_count, comment_count, like_count, ai_reply_count,
+		       DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%TZ') AS created_at
+		FROM posts
+		WHERE deleted_at IS NULL AND status = 'NORMAL' AND id IN (%s)`, strings.Join(placeholders, ",")), args...)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]PostResult, len(rows))
+	for _, row := range rows {
+		row.Category = "技术探讨"
+		row.Tags = []string{}
+		byID[row.ID] = row
+	}
+	out := make([]PostResult, 0, len(rows))
+	for _, id := range ids {
+		if row, ok := byID[id]; ok {
+			out = append(out, row)
+		}
+	}
+	return out, nil
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func IsNotFound(err error) bool {

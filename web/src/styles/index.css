@@ -71,6 +71,15 @@
     text-rendering: optimizeLegibility;
   }
 
+  .brand-background {
+    background-image:
+      linear-gradient(rgba(251, 249, 244, 0.72), rgba(251, 249, 244, 0.9)),
+      url("../assets/brand/background.png");
+    background-attachment: fixed;
+    background-position: center top;
+    background-size: cover;
+  }
+
   /* Material Symbols base — every icon derives its optical size/weight here. */
   .material-symbols-outlined {
     font-family: 'Material Symbols Outlined';

@@ -157,3 +157,18 @@ export interface DecisionTimelineEntry {
   time: string;
   message: string;
 }
+
+export interface RecentTaskRow {
+  id: string | number;
+  label: string;
+  icon: string;
+  status: TaskStatus;
+}
+
+export interface DecisionPostContext {
+  postId: string | number;
+  title: string;
+  body: string;
+  tags: string[];
+  timestamp: string;
+}

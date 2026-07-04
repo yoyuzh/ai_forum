@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { adminApi } from "../api/client";
+import type { RecentTaskRow } from "../api/types";
 import StatCard from "../components/StatCard";
 import MaterialIcon from "../components/MaterialIcon";
 
@@ -30,7 +31,7 @@ export default function DashboardPage() {
     queryKey: ["dashboard", "recentPosts"],
     queryFn: adminApi.dashboard.recentPosts,
   });
-  const { data: recentTasks = [] } = useQuery({
+  const { data: recentTasks = [] } = useQuery<RecentTaskRow[]>({
     queryKey: ["dashboard", "recentTasks"],
     queryFn: adminApi.dashboard.recentTasks,
   });
@@ -48,10 +49,10 @@ export default function DashboardPage() {
     : [];
 
   return (
-    <div className="mx-auto max-w-[1440px] px-margin-mobile py-lg md:px-margin-desktop">
+    <div className="admin-page">
       <div className="mb-lg">
-        <h1 className="font-headline-xl font-bold text-cohere-primary">Dashboard 概览</h1>
-        <p className="mt-1 font-body-main text-cohere-muted">实时系统状态与数据分析</p>
+        <h1 className="admin-page-heading">Dashboard 概览</h1>
+        <p className="admin-page-subtitle">实时系统状态与数据分析</p>
       </div>
 
       {/* Stat bento */}

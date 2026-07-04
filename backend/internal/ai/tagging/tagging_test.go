@@ -8,7 +8,7 @@ import (
 func TestRuleTaggerReturnsFiveTypes(t *testing.T) {
 	tagger := RuleTagger{}
 
-	tags := tagger.Tag(Post{ID: 42, Title: "Should we debate AI risk?", Content: "I am worried about safety"})
+	tags := tagger.Tag(context.Background(), Post{ID: 42, Title: "Should we debate AI risk?", Content: "I am worried about safety"})
 
 	seen := map[string]bool{}
 	for _, tag := range tags {
@@ -42,6 +42,28 @@ func TestHandlerWritesTagsAndAppendsPostTagged(t *testing.T) {
 	}
 	if outbox.eventType != "post.tagged" || outbox.aggregateID != 42 {
 		t.Fatalf("outbox = %s/%d, want post.tagged/42", outbox.eventType, outbox.aggregateID)
+	}
+}
+
+func TestParseTagsFiltersInvalidModelOutput(t *testing.T) {
+	got := ParseTags("```json\n{\"topic\":[\"学习规划\",\"求助\"],\"intent\":[\"求建议\",\"求助\"],\"emotion\":[\"焦虑\"],\"debate\":[\"争议性低\"],\"risk\":[\"正常\",\"未知\"]}\n```")
+
+	if len(got.Topic) != 1 || got.Topic[0] != "学习规划" {
+		t.Fatalf("topic = %#v", got.Topic)
+	}
+	if len(got.Intent) != 1 || got.Intent[0] != "求建议" {
+		t.Fatalf("intent = %#v", got.Intent)
+	}
+	if len(got.Risk) != 1 || got.Risk[0] != "正常" {
+		t.Fatalf("risk = %#v", got.Risk)
+	}
+}
+
+func TestParseTagsFallsBackOnInvalidJSON(t *testing.T) {
+	got := ParseTags("not json")
+
+	if len(got.Intent) != 1 || got.Intent[0] != "求建议" || len(got.Debate) != 1 || got.Debate[0] != "争议性低" || len(got.Risk) != 1 || got.Risk[0] != "正常" {
+		t.Fatalf("fallback tags = %#v", got)
 	}
 }
 
