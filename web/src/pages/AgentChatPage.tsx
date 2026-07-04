@@ -46,7 +46,7 @@ export default function AgentChatPage() {
           </Link>
         </div>
 
-        <section className="grid min-h-[calc(100vh-180px)] overflow-hidden rounded-lg border border-cohere-hairline bg-cohere-surface-lowest lg:grid-cols-[280px_minmax(0,1fr)_280px]">
+        <section className="grid h-[calc(100vh-180px)] overflow-hidden rounded-lg border border-cohere-hairline bg-cohere-surface-lowest lg:grid-cols-[280px_minmax(0,1fr)_280px]">
           <aside className="hidden border-r border-cohere-hairline bg-cohere-surface-low p-lg lg:flex lg:flex-col">
             <img
               src={chat.agent.avatar}
@@ -68,7 +68,7 @@ export default function AgentChatPage() {
             </div>
           </aside>
 
-          <div className="flex min-h-0 flex-col">
+          <div className="flex min-h-0 flex-col overflow-hidden">
             <header className="flex items-center gap-md border-b border-cohere-hairline px-md py-sm">
               <img
                 src={chat.agent.avatar}
@@ -83,7 +83,7 @@ export default function AgentChatPage() {
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto bg-cohere-surface-lowest px-md py-lg md:px-xl">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-cohere-surface-lowest px-md py-lg md:px-xl">
               {chat.messages.length === 0 ? (
                 <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center gap-md text-center">
                   <MaterialIcon name={chat.agent.icon || "smart_toy"} size={48} className="text-cohere-muted" />
@@ -124,7 +124,7 @@ export default function AgentChatPage() {
             </ComposerPrimitive.Root>
           </div>
 
-          <aside className="hidden border-l border-cohere-hairline bg-cohere-surface-low p-md lg:flex lg:flex-col">
+          <aside className="hidden min-h-0 border-l border-cohere-hairline bg-cohere-surface-low p-md lg:flex lg:flex-col">
             <div className="mb-md flex items-center justify-between">
               <h2 className="font-label-mono-bold text-cohere-primary">历史记录</h2>
               <MaterialIcon name="history" size={18} className="text-cohere-muted" />
@@ -132,7 +132,7 @@ export default function AgentChatPage() {
             {history.length === 0 ? (
               <p className="font-caption text-cohere-muted">发送第一条消息后，这里会出现真实保存的历史。</p>
             ) : (
-              <div className="flex flex-col gap-xs">
+              <div className="min-h-0 flex-1 overflow-y-auto pr-xs flex flex-col gap-xs">
                 {history.map((item) => (
                   <Link
                     key={item.session.id}
