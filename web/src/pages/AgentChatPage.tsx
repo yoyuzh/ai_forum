@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, NavLink, useParams } from "react-router-dom";
+import { Link, NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   AssistantRuntimeProvider,
   ComposerPrimitive,
@@ -15,8 +15,22 @@ import { HttpError } from "../api/httpClient";
 
 export default function AgentChatPage() {
   const agentId = Number(useParams().agentId);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rawSessionId = searchParams.get("sessionId");
+  const sessionId = rawSessionId ? Number(rawSessionId) : undefined;
   const [historyQuery, setHistoryQuery] = useState("");
-  const { history, chat, isLoading, error, sendMessage, isSending, sendError } = useAgentChat(agentId);
+  const {
+    history,
+    chat,
+    isLoading,
+    error,
+    createChat,
+    isCreatingChat,
+    sendMessage,
+    isSending,
+    sendError,
+  } = useAgentChat(agentId, sessionId);
   const runtimeMessages = useMemo(
     () => (chat?.messages ?? []).map(toThreadMessage),
     [chat?.messages],
@@ -38,7 +52,13 @@ export default function AgentChatPage() {
     );
   }, [history, historyQuery]);
 
+  const startNewChat = async () => {
+    const next = await createChat();
+    navigate(`/agents/${next.session.aiAgentId}/chat?sessionId=${next.session.id}`, { replace: false });
+  };
+
   if (Number.isNaN(agentId)) return <ChatState title="无效的 AI 角色" />;
+  if (rawSessionId && Number.isNaN(sessionId)) return <ChatState title="无效的对话" />;
   if (isLoading) return <ChatState title="正在加载对话..." loading />;
   if (error instanceof HttpError && error.status === 401) {
     return <ChatState title="请先登录后再开始 AI 对话" actionLabel="去登录" actionTo="/login" />;
@@ -55,13 +75,15 @@ export default function AgentChatPage() {
             style={{ width: "clamp(320px, 25vw, 400px)" }}
           >
             <div className="flex flex-col gap-sm border-b border-cohere-hairline p-md">
-              <Link
-                to="/agents"
+              <button
+                type="button"
+                onClick={startNewChat}
+                disabled={isCreatingChat}
                 className="flex w-full items-center justify-center gap-sm rounded-pill bg-cohere-primary px-md py-sm font-label-mono-bold text-cohere-on-primary transition-opacity hover:opacity-90"
               >
                 <MaterialIcon name="add" size={16} />
-                新对话
-              </Link>
+                {isCreatingChat ? "创建中" : "新对话"}
+              </button>
               <div className="relative mt-xs">
                 <MaterialIcon
                   name="search"
@@ -87,9 +109,9 @@ export default function AgentChatPage() {
                   filteredHistory.map((item) => (
                     <Link
                       key={item.session.id}
-                      to={`/agents/${item.session.aiAgentId}/chat`}
+                      to={`/agents/${item.session.aiAgentId}/chat?sessionId=${item.session.id}`}
                       className={`rounded-sm border p-sm transition-colors ${
-                        item.session.aiAgentId === agentId
+                        item.session.id === chat.session.id
                           ? "border-cohere-hairline bg-cohere-soft-stone"
                           : "border-transparent hover:bg-cohere-surface-low"
                       }`}
@@ -252,7 +274,7 @@ function AgentProfile({ agent }: { agent: AIAgent }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-lg overflow-y-auto p-md">
       <div className="flex flex-col items-center gap-sm py-md text-center">
-        <AgentInitials agent={agent} size="lg" />
+        <ProfileAvatar agent={agent} />
         <div>
           <h3 className="font-body-large font-medium text-cohere-primary">{agent.displayName}</h3>
           <p className="font-caption text-cohere-muted">{agentSubtitle(agent)}</p>
@@ -293,6 +315,22 @@ function AgentProfile({ agent }: { agent: AIAgent }) {
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProfileAvatar({ agent }: { agent: AIAgent }) {
+  if (!agent.avatar) return <AgentInitials agent={agent} size="lg" />;
+
+  return (
+    <div className="relative h-32 w-32 overflow-hidden rounded-full bg-cohere-surface">
+      <img
+        src={agent.avatar}
+        alt={agent.displayName}
+        className="h-full w-full object-cover object-center"
+      />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(251,249,244,0)_42%,rgba(251,249,244,0.35)_66%,var(--c-surface)_100%)]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-[linear-gradient(to_bottom,rgba(251,249,244,0),var(--c-surface)_92%)]" />
     </div>
   );
 }

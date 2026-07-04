@@ -290,8 +290,9 @@ export interface ApiClient {
   };
   chat: {
     list: () => Promise<AIChatSessionSummary[]>;
-    get: (agentId: number) => Promise<AIChat>;
-    sendMessage: (agentId: number, content: string) => Promise<AIChatSendResult>;
+    create: (agentId: number) => Promise<AIChat>;
+    get: (agentId: number, sessionId?: number) => Promise<AIChat>;
+    sendMessage: (agentId: number, content: string, sessionId?: number) => Promise<AIChatSendResult>;
   };
   tasks: { list: () => Promise<AIReplyTask[]> };
   decisionLogs: {

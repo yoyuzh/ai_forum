@@ -45,23 +45,34 @@ const chatMessages = new Map<number, AIChatMessage[]>();
 let nextChatSessionId = 1;
 let nextChatMessageId = 1;
 
-function getMockChat(agentId: number): AIChat {
+function createMockChat(agentId: number): AIChat {
   const agent = db.getAgent(agentId);
   if (!agent) throw new Error("Agent not found");
-  let session = chatSessions.get(agentId);
+  const now = new Date().toISOString();
+  const session = {
+    id: nextChatSessionId++,
+    userId: 1,
+    aiAgentId: agentId,
+    title: agent.displayName,
+    createdAt: now,
+    updatedAt: now,
+  };
+  chatSessions.set(session.id, session);
+  chatMessages.set(session.id, []);
+  return { session, agent, messages: [] };
+}
+
+function getMockChat(agentId: number, sessionId?: number): AIChat {
+  const agent = db.getAgent(agentId);
+  if (!agent) throw new Error("Agent not found");
+  let session = sessionId ? chatSessions.get(sessionId) : undefined;
+  if (session && session.aiAgentId !== agentId) throw new Error("Session not found");
   if (!session) {
-    const now = new Date().toISOString();
-    session = {
-      id: nextChatSessionId++,
-      userId: 1,
-      aiAgentId: agentId,
-      title: agent.displayName,
-      createdAt: now,
-      updatedAt: now,
-    };
-    chatSessions.set(agentId, session);
-    chatMessages.set(session.id, []);
+    session = Array.from(chatSessions.values())
+      .filter((item) => item.aiAgentId === agentId)
+      .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))[0];
   }
+  if (!session) return createMockChat(agentId);
   return { session, agent, messages: chatMessages.get(session.id) ?? [] };
 }
 
@@ -91,13 +102,20 @@ function createMockChatMessage(sessionId: number, role: AIChatMessage["role"], c
     createdAt: new Date().toISOString(),
   };
   chatMessages.set(sessionId, [...(chatMessages.get(sessionId) ?? []), message]);
-  for (const [agentId, session] of chatSessions) {
+  for (const [sessionKey, session] of chatSessions) {
     if (session.id === sessionId) {
-      chatSessions.set(agentId, { ...session, updatedAt: message.createdAt });
+      const messages = chatMessages.get(sessionId) ?? [];
+      const title = messages.length === 1 ? titleFromContent(content) : session.title;
+      chatSessions.set(sessionKey, { ...session, title, updatedAt: message.createdAt });
       break;
     }
   }
   return message;
+}
+
+function titleFromContent(content: string): string {
+  const title = content.trim().replace(/\s+/g, " ");
+  return title.length > 28 ? `${title.slice(0, 28)}...` : title || "新对话";
 }
 
 export const mockApi: ApiClient = {
@@ -192,9 +210,10 @@ export const mockApi: ApiClient = {
 
   chat: {
     list: async (): Promise<AIChatSessionSummary[]> => delay(listMockChats()),
-    get: async (agentId: number): Promise<AIChat> => delay(getMockChat(agentId)),
-    sendMessage: async (agentId: number, content: string): Promise<AIChatSendResult> => {
-      const chat = getMockChat(agentId);
+    create: async (agentId: number): Promise<AIChat> => delay(createMockChat(agentId)),
+    get: async (agentId: number, sessionId?: number): Promise<AIChat> => delay(getMockChat(agentId, sessionId)),
+    sendMessage: async (agentId: number, content: string, sessionId?: number): Promise<AIChatSendResult> => {
+      const chat = getMockChat(agentId, sessionId);
       const trimmed = content.trim();
       if (!trimmed) throw new Error("请输入消息内容");
       const userMessage = createMockChatMessage(chat.session.id, "user", trimmed);
@@ -203,7 +222,7 @@ export const mockApi: ApiClient = {
         "assistant",
         `${chat.agent.displayName}：我先按自己的视角回应你。${trimmed.length > 24 ? trimmed.slice(0, 24) + "…" : trimmed}`,
       );
-      return delay({ session: chat.session, userMessage, assistantMessage });
+      return delay({ session: chatSessions.get(chat.session.id) ?? chat.session, userMessage, assistantMessage });
     },
   },
 

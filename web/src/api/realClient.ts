@@ -483,16 +483,27 @@ export const realApi: ApiClient = {
       (await http<BackendChatSessionSummary[]>("/api/agent-chats", { skipAuthRedirect: true })).map(
         chatSessionSummaryFromBackend,
       ),
-    get: async (agentId: number): Promise<AIChat> =>
+    create: async (agentId: number): Promise<AIChat> =>
       chatFromBackend(
         agentId,
-        await http<BackendChat>(`/api/agents/${agentId}/chat`, { skipAuthRedirect: true }),
+        await http<BackendChat>(`/api/agents/${agentId}/chat`, {
+          method: "POST",
+          skipAuthRedirect: true,
+        }),
       ),
-    sendMessage: async (agentId: number, content: string): Promise<AIChatSendResult> => {
+    get: async (agentId: number, sessionId?: number): Promise<AIChat> =>
+      chatFromBackend(
+        agentId,
+        await http<BackendChat>(
+          `/api/agents/${agentId}/chat${sessionId ? `?sessionId=${sessionId}` : ""}`,
+          { skipAuthRedirect: true },
+        ),
+      ),
+    sendMessage: async (agentId: number, content: string, sessionId?: number): Promise<AIChatSendResult> => {
       const result = await http<BackendChatSendResult>(`/api/agents/${agentId}/chat/messages`, {
         method: "POST",
         skipAuthRedirect: true,
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, sessionId }),
       });
       return {
         session: chatSessionFromBackend(result.session),

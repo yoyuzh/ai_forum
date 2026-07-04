@@ -16,7 +16,7 @@ func TestServiceGetsOrCreatesSessionWithOrderedMessages(t *testing.T) {
 	}
 	svc := NewService(store, &fakeModel{reply: "unused"})
 
-	got, err := svc.Get(context.Background(), 7, 1001)
+	got, err := svc.Get(context.Background(), 7, 1001, 0)
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)
 	}
@@ -31,9 +31,25 @@ func TestServiceGetsOrCreatesSessionWithOrderedMessages(t *testing.T) {
 func TestServiceReturnsEmptyMessagesSlice(t *testing.T) {
 	svc := NewService(newFakeStore(), &fakeModel{reply: "unused"})
 
-	got, err := svc.Get(context.Background(), 7, 1001)
+	got, err := svc.Get(context.Background(), 7, 1001, 0)
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)
+	}
+	if got.Messages == nil || len(got.Messages) != 0 {
+		t.Fatalf("messages = %#v, want empty non-nil slice", got.Messages)
+	}
+}
+
+func TestServiceCreatesNewSession(t *testing.T) {
+	store := newFakeStore()
+	svc := NewService(store, &fakeModel{reply: "unused"})
+
+	got, err := svc.Create(context.Background(), 7, 1001)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if got.Session.ID == 9 {
+		t.Fatalf("session id = %d, want new session", got.Session.ID)
 	}
 	if got.Messages == nil || len(got.Messages) != 0 {
 		t.Fatalf("messages = %#v, want empty non-nil slice", got.Messages)
@@ -63,7 +79,7 @@ func TestServiceListsUserSessions(t *testing.T) {
 func TestServiceRejectsEmptyMessage(t *testing.T) {
 	svc := NewService(newFakeStore(), &fakeModel{reply: "unused"})
 
-	_, err := svc.Send(context.Background(), 7, 1001, "  \n\t ")
+	_, err := svc.Send(context.Background(), 7, 1001, 0, "  \n\t ")
 	if !errors.Is(err, ErrEmptyMessage) {
 		t.Fatalf("Send error = %v, want ErrEmptyMessage", err)
 	}
@@ -74,7 +90,7 @@ func TestServicePersistsUserAndAssistantMessages(t *testing.T) {
 	model := &fakeModel{reply: "你好，我是林理臣。"}
 	svc := NewService(store, model)
 
-	got, err := svc.Send(context.Background(), 7, 1001, "聊聊增长")
+	got, err := svc.Send(context.Background(), 7, 1001, 0, "聊聊增长")
 	if err != nil {
 		t.Fatalf("Send returned error: %v", err)
 	}
@@ -87,6 +103,9 @@ func TestServicePersistsUserAndAssistantMessages(t *testing.T) {
 	if len(store.created) != 2 || store.created[0].Role != RoleUser || store.created[1].Role != RoleAssistant {
 		t.Fatalf("created messages = %#v, want user then assistant", store.created)
 	}
+	if got.Session.Title != "聊聊增长" {
+		t.Fatalf("session title = %q, want generated title", got.Session.Title)
+	}
 	if model.last.AIAgentID != 1001 || model.last.TaskType != "ai_chat" {
 		t.Fatalf("model request metadata = %#v", model.last)
 	}
@@ -96,7 +115,7 @@ func TestServiceKeepsUserMessageWhenModelFails(t *testing.T) {
 	store := newFakeStore()
 	svc := NewService(store, &fakeModel{err: errors.New("model unavailable")})
 
-	got, err := svc.Send(context.Background(), 7, 1001, "还在吗")
+	got, err := svc.Send(context.Background(), 7, 1001, 0, "还在吗")
 	if err == nil {
 		t.Fatal("Send returned nil error, want model failure")
 	}
@@ -155,12 +174,36 @@ func (s *fakeStore) ListSessions(_ context.Context, userID int64) ([]SessionSumm
 	return s.sessions, nil
 }
 
-func (s *fakeStore) GetOrCreateSession(_ context.Context, userID, agentID int64, title string) (Session, error) {
+func (s *fakeStore) CreateSession(_ context.Context, userID, agentID int64, title string) (Session, error) {
+	s.nextID++
+	s.session = Session{ID: s.nextID, UserID: userID, AIAgentID: agentID, Title: title}
+	s.messages = nil
+	return s.session, nil
+}
+
+func (s *fakeStore) GetLatestOrCreateSession(_ context.Context, userID, agentID int64, title string) (Session, error) {
 	s.session.UserID = userID
 	s.session.AIAgentID = agentID
 	if s.session.Title == "" {
 		s.session.Title = title
 	}
+	return s.session, nil
+}
+
+func (s *fakeStore) GetSession(_ context.Context, userID, agentID, sessionID int64) (Session, error) {
+	if sessionID != s.session.ID {
+		return Session{}, ErrAgentNotFound
+	}
+	s.session.UserID = userID
+	s.session.AIAgentID = agentID
+	return s.session, nil
+}
+
+func (s *fakeStore) UpdateSessionTitle(_ context.Context, sessionID int64, title string) (Session, error) {
+	if sessionID != s.session.ID {
+		return Session{}, ErrAgentNotFound
+	}
+	s.session.Title = title
 	return s.session, nil
 }
 

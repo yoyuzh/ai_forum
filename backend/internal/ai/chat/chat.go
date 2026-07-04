@@ -69,7 +69,10 @@ type NewMessage struct {
 type Store interface {
 	ListSessions(context.Context, int64) ([]SessionSummary, error)
 	GetAgent(context.Context, int64) (Agent, error)
-	GetOrCreateSession(context.Context, int64, int64, string) (Session, error)
+	CreateSession(context.Context, int64, int64, string) (Session, error)
+	GetLatestOrCreateSession(context.Context, int64, int64, string) (Session, error)
+	GetSession(context.Context, int64, int64, int64) (Session, error)
+	UpdateSessionTitle(context.Context, int64, string) (Session, error)
 	ListMessages(context.Context, int64) ([]Message, error)
 	CreateMessage(context.Context, NewMessage) (Message, error)
 }
@@ -99,12 +102,24 @@ func (s *Service) List(ctx context.Context, userID int64) ([]SessionSummary, err
 	return s.store.ListSessions(ctx, userID)
 }
 
-func (s *Service) Get(ctx context.Context, userID, agentID int64) (SessionResponse, error) {
+func (s *Service) Create(ctx context.Context, userID, agentID int64) (SessionResponse, error) {
 	agent, err := s.store.GetAgent(ctx, agentID)
 	if err != nil {
 		return SessionResponse{}, err
 	}
-	session, err := s.store.GetOrCreateSession(ctx, userID, agentID, agent.Name)
+	session, err := s.store.CreateSession(ctx, userID, agentID, agent.Name)
+	if err != nil {
+		return SessionResponse{}, err
+	}
+	return SessionResponse{Session: session, Agent: agent, Messages: []Message{}}, nil
+}
+
+func (s *Service) Get(ctx context.Context, userID, agentID, sessionID int64) (SessionResponse, error) {
+	agent, err := s.store.GetAgent(ctx, agentID)
+	if err != nil {
+		return SessionResponse{}, err
+	}
+	session, err := s.session(ctx, userID, agentID, sessionID, agent.Name)
 	if err != nil {
 		return SessionResponse{}, err
 	}
@@ -115,12 +130,12 @@ func (s *Service) Get(ctx context.Context, userID, agentID int64) (SessionRespon
 	return SessionResponse{Session: session, Agent: agent, Messages: orderMessages(messages)}, nil
 }
 
-func (s *Service) Send(ctx context.Context, userID, agentID int64, content string) (SendResponse, error) {
+func (s *Service) Send(ctx context.Context, userID, agentID, sessionID int64, content string) (SendResponse, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return SendResponse{}, ErrEmptyMessage
 	}
-	current, err := s.Get(ctx, userID, agentID)
+	current, err := s.Get(ctx, userID, agentID, sessionID)
 	if err != nil {
 		return SendResponse{}, err
 	}
@@ -128,7 +143,14 @@ func (s *Service) Send(ctx context.Context, userID, agentID int64, content strin
 	if err != nil {
 		return SendResponse{}, err
 	}
-	resp := SendResponse{Session: current.Session, UserMessage: userMsg}
+	session := current.Session
+	if len(current.Messages) == 0 {
+		updated, err := s.store.UpdateSessionTitle(ctx, session.ID, makeSessionTitle(content))
+		if err == nil {
+			session = updated
+		}
+	}
+	resp := SendResponse{Session: session, UserMessage: userMsg}
 	reply, err := s.model.Generate(ctx, modelclient.Request{
 		SystemPrompt: current.Agent.SystemPrompt,
 		Prompt:       buildPrompt(current.Agent, current.Messages, content),
@@ -144,6 +166,26 @@ func (s *Service) Send(ctx context.Context, userID, agentID int64, content strin
 	}
 	resp.AssistantMessage = &assistantMsg
 	return resp, nil
+}
+
+func (s *Service) session(ctx context.Context, userID, agentID, sessionID int64, title string) (Session, error) {
+	if sessionID > 0 {
+		return s.store.GetSession(ctx, userID, agentID, sessionID)
+	}
+	return s.store.GetLatestOrCreateSession(ctx, userID, agentID, title)
+}
+
+func makeSessionTitle(content string) string {
+	fields := strings.Fields(strings.TrimSpace(content))
+	if len(fields) == 0 {
+		return "新对话"
+	}
+	title := strings.Join(fields, " ")
+	runes := []rune(title)
+	if len(runes) > 28 {
+		title = string(runes[:28]) + "..."
+	}
+	return title
 }
 
 func buildPrompt(agent Agent, messages []Message, latest string) string {
@@ -235,11 +277,10 @@ func (s *SQLStore) GetAgent(ctx context.Context, id int64) (Agent, error) {
 	return agent, err
 }
 
-func (s *SQLStore) GetOrCreateSession(ctx context.Context, userID, agentID int64, title string) (Session, error) {
+func (s *SQLStore) CreateSession(ctx context.Context, userID, agentID int64, title string) (Session, error) {
 	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO ai_chat_sessions (user_id, ai_agent_id, title)
-		VALUES (?, ?, ?)
-		ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), updated_at = updated_at`,
+		VALUES (?, ?, ?)`,
 		userID, agentID, title)
 	if err != nil {
 		return Session{}, err
@@ -253,6 +294,50 @@ func (s *SQLStore) GetOrCreateSession(ctx context.Context, userID, agentID int64
 		SELECT id, user_id, ai_agent_id, title, created_at, updated_at
 		FROM ai_chat_sessions
 		WHERE id = ?`, id)
+	return session, err
+}
+
+func (s *SQLStore) GetLatestOrCreateSession(ctx context.Context, userID, agentID int64, title string) (Session, error) {
+	var session Session
+	err := s.db.GetContext(ctx, &session, `
+		SELECT id, user_id, ai_agent_id, title, created_at, updated_at
+		FROM ai_chat_sessions
+		WHERE user_id = ? AND ai_agent_id = ?
+		ORDER BY updated_at DESC, id DESC
+		LIMIT 1`, userID, agentID)
+	if err == nil {
+		return session, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Session{}, err
+	}
+	return s.CreateSession(ctx, userID, agentID, title)
+}
+
+func (s *SQLStore) GetSession(ctx context.Context, userID, agentID, sessionID int64) (Session, error) {
+	var session Session
+	err := s.db.GetContext(ctx, &session, `
+		SELECT id, user_id, ai_agent_id, title, created_at, updated_at
+		FROM ai_chat_sessions
+		WHERE id = ? AND user_id = ? AND ai_agent_id = ?`, sessionID, userID, agentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Session{}, ErrAgentNotFound
+	}
+	return session, err
+}
+
+func (s *SQLStore) UpdateSessionTitle(ctx context.Context, sessionID int64, title string) (Session, error) {
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE ai_chat_sessions
+		SET title = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?`, title, sessionID); err != nil {
+		return Session{}, err
+	}
+	var session Session
+	err := s.db.GetContext(ctx, &session, `
+		SELECT id, user_id, ai_agent_id, title, created_at, updated_at
+		FROM ai_chat_sessions
+		WHERE id = ?`, sessionID)
 	return session, err
 }
 
@@ -303,6 +388,20 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	writeChatResponse(w, resp, err)
 }
 
+func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+	sub, ok := auth.SubjectFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	agentID, ok := parseAgentID(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.service.Create(r.Context(), sub.UserID, agentID)
+	writeChatResponse(w, resp, err)
+}
+
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	sub, ok := auth.SubjectFromContext(r.Context())
 	if !ok {
@@ -313,7 +412,11 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	resp, err := h.service.Get(r.Context(), sub.UserID, agentID)
+	sessionID, ok := parseOptionalSessionID(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.service.Get(r.Context(), sub.UserID, agentID, sessionID)
 	writeChatResponse(w, resp, err)
 }
 
@@ -328,13 +431,14 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Content string `json:"content"`
+		Content   string `json:"content"`
+		SessionID int64  `json:"sessionId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-	resp, err := h.service.Send(r.Context(), sub.UserID, agentID, req.Content)
+	resp, err := h.service.Send(r.Context(), sub.UserID, agentID, req.SessionID, req.Content)
 	writeChatResponse(w, resp, err)
 }
 
@@ -342,6 +446,19 @@ func parseAgentID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("agentId"), 10, 64)
 	if err != nil || id <= 0 {
 		http.Error(w, "invalid agent id", http.StatusBadRequest)
+		return 0, false
+	}
+	return id, true
+}
+
+func parseOptionalSessionID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	raw := r.URL.Query().Get("sessionId")
+	if raw == "" {
+		return 0, true
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid session id", http.StatusBadRequest)
 		return 0, false
 	}
 	return id, true

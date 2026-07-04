@@ -40,6 +40,7 @@ type BusinessRoutes struct {
 	RetryAIReplies            http.Handler
 	ListAgents                http.Handler
 	ListAgentChats            http.Handler
+	CreateAgentChat           http.Handler
 	GetAgentChat              http.Handler
 	SendAgentChatMessage      http.Handler
 	ListAITasks               http.Handler
@@ -161,6 +162,9 @@ func NewWithBusinessRoutes(deps []Dependency, internal http.Handler, business Bu
 	}
 	if business.ListAgentChats != nil {
 		mux.Handle("GET /api/agent-chats", business.ListAgentChats)
+	}
+	if business.CreateAgentChat != nil {
+		mux.Handle("POST /api/agents/{agentId}/chat", business.CreateAgentChat)
 	}
 	if business.GetAgentChat != nil {
 		mux.Handle("GET /api/agents/{agentId}/chat", business.GetAgentChat)

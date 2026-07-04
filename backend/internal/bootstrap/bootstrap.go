@@ -209,6 +209,7 @@ func (a *App) NewAPIServer() Process {
 		aiStatus:                 sse.NewStatusHandler(sse.NewSQLStatusStore(a.DB)),
 		retryAIReplies:           retryAIReplies,
 		listAgentChats:           http.HandlerFunc(chatHandler.List),
+		createAgentChat:          http.HandlerFunc(chatHandler.Create),
 		getAgentChat:             http.HandlerFunc(chatHandler.Get),
 		sendAgentChatMessage:     http.HandlerFunc(chatHandler.Send),
 		searchPosts:              http.HandlerFunc(searchQueryHandler.SearchPosts),
@@ -252,6 +253,7 @@ type businessRouteDeps struct {
 	aiStatus                 http.Handler
 	retryAIReplies           http.Handler
 	listAgentChats           http.Handler
+	createAgentChat          http.Handler
 	getAgentChat             http.Handler
 	sendAgentChatMessage     http.Handler
 	searchPosts              http.Handler
@@ -292,6 +294,7 @@ func businessRoutes(deps businessRouteDeps) (router.BusinessRoutes, error) {
 		AIStatus:                 deps.aiStatus,
 		RetryAIReplies:           deps.retryAIReplies,
 		ListAgentChats:           deps.tokens.Middleware(deps.listAgentChats),
+		CreateAgentChat:          deps.tokens.Middleware(deps.createAgentChat),
 		GetAgentChat:             deps.tokens.Middleware(deps.getAgentChat),
 		SendAgentChatMessage:     deps.tokens.Middleware(deps.sendAgentChatMessage),
 		SearchPosts:              deps.searchPosts,
