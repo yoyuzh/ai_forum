@@ -136,7 +136,7 @@ export default function AgentChatPage() {
               style={{ height: 70 }}
             >
               <div className="flex min-w-0 items-center gap-md">
-                <AgentInitials agent={chat.agent} size="sm" />
+                <AgentAvatar agent={chat.agent} size="sm" />
                 <div className="min-w-0">
                   <div className="truncate font-body-main text-[18px] font-medium text-cohere-primary">
                     {chat.agent.displayName}
@@ -159,7 +159,7 @@ export default function AgentChatPage() {
             <div className="min-h-0 flex-1 overflow-y-auto px-md py-xl md:px-section">
               {chat.messages.length === 0 ? (
                 <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center gap-md text-center">
-                  <AgentInitials agent={chat.agent} size="lg" />
+                  <AgentAvatar agent={chat.agent} size="lg" />
                   <h1 className="font-feature-title text-cohere-primary">开始和 {chat.agent.displayName} 对话</h1>
                   <p className="font-body-main text-cohere-on-surface-variant">
                     输入问题后，回复会按这个角色的人设生成并保存。
@@ -359,7 +359,7 @@ function ChatBubble({ message, agent }: { message: AIChatMessage; agent: AIAgent
 
   return (
     <div className="flex items-start gap-md">
-      <AgentInitials agent={agent} size="sm" className="mt-xs" />
+      <AgentAvatar agent={agent} size="sm" className="mt-xs" />
       <div className="max-w-[560px] rounded-ai rounded-tl-sm border border-cohere-hairline bg-cohere-surface-lowest px-lg py-md text-cohere-on-surface">
         <SafeMarkdown
           content={message.content}
@@ -376,7 +376,7 @@ function ChatBubble({ message, agent }: { message: AIChatMessage; agent: AIAgent
 function PendingBubble({ agent }: { agent: AIAgent }) {
   return (
     <div className="flex items-center gap-md">
-      <AgentInitials agent={agent} size="sm" muted />
+      <AgentAvatar agent={agent} size="sm" muted />
       <div className="flex items-center gap-sm font-label-mono text-cohere-muted">
         正在生成回复
         <span className="flex gap-xs">
@@ -386,6 +386,31 @@ function PendingBubble({ agent }: { agent: AIAgent }) {
         </span>
       </div>
     </div>
+  );
+}
+
+function AgentAvatar({
+  agent,
+  size,
+  muted = false,
+  className = "",
+}: {
+  agent: AIAgent;
+  size: "sm" | "lg";
+  muted?: boolean;
+  className?: string;
+}) {
+  if (!agent.avatar) return <AgentInitials agent={agent} size={size} muted={muted} className={className} />;
+
+  const sizeClass = size === "lg" ? "h-24 w-24 border-4" : "h-8 w-8 border";
+  return (
+    <img
+      src={agent.avatar}
+      alt={agent.displayName}
+      className={`${sizeClass} ${className} flex-shrink-0 rounded-full border-cohere-surface-highest object-cover object-center ${
+        muted ? "opacity-60 grayscale" : ""
+      }`}
+    />
   );
 }
 
