@@ -1,6 +1,7 @@
 import { Link, createSearchParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Virtuoso } from "react-virtuoso";
 import { usePosts } from "../hooks/usePosts";
+import { useHotTags } from "../hooks/useHotTags";
 import { useAgents } from "../hooks/useAgents";
 import { useActivities } from "../hooks/useActivities";
 import { useFilterStore } from "../stores/useFilterStore";
@@ -18,8 +19,6 @@ const TABS: { key: FeedTab; label: string }[] = [
   { key: "ai_most", label: "AI 参与最多" },
 ];
 
-const HOT_TAGS = ["Rust", "架构设计", "大模型微调", "k8s", "Vite"];
-
 export default function HomePage() {
   const { feedTab, setFeedTab } = useFilterStore();
   const [searchParams] = useSearchParams();
@@ -27,6 +26,7 @@ export default function HomePage() {
   const query = searchParams.get("q") ?? "";
   const tag = searchParams.get("tag") ?? undefined;
   const { posts, isLoading } = usePosts(feedTab, query, tag);
+  const { tags: hotTags } = useHotTags();
   const { agents } = useAgents();
   const { activities } = useActivities();
   const activeAgents = agents.filter((a) => a.active).slice(0, 3);
@@ -130,7 +130,7 @@ export default function HomePage() {
 
         {/* Right sidebar (4 cols) */}
         <aside className="flex flex-col gap-xl pt-lg lg:col-span-4">
-          <HotTags tags={HOT_TAGS} onSelect={selectTag} />
+          <HotTags tags={hotTags} onSelect={selectTag} />
           <ActiveAIRoles agents={activeAgents} />
           <RecentAIActivity activities={activities.slice(0, 10)} />
         </aside>

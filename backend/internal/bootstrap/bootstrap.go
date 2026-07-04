@@ -34,6 +34,7 @@ import (
 	favorite "ai-forum/backend/internal/forum/favorite"
 	like "ai-forum/backend/internal/forum/like"
 	post "ai-forum/backend/internal/forum/post"
+	forumtag "ai-forum/backend/internal/forum/tag"
 	"ai-forum/backend/internal/internalapi"
 	"ai-forum/backend/internal/logger"
 	"ai-forum/backend/internal/moderation"
@@ -178,6 +179,7 @@ func (a *App) NewAPIServer() Process {
 	}
 	commentSvc := comment.NewService(comment.NewSQLRepository(), outbox.Append, commentOpts...)
 	commentHandler := comment.NewHandler(commentSvc, runTx)
+	tagHandler := forumtag.NewHandler(forumtag.NewSQLRepository(), runTx)
 	notificationHTTPHandler := notification.NewHTTPHandler(a.DB)
 	adminHandler := admin.NewHandler(admin.NewSQLStore(a.DB), mustAdminAuthorizer())
 	chatHandler := a.newChatHandler()
@@ -190,6 +192,7 @@ func (a *App) NewAPIServer() Process {
 		profile:                     http.HandlerFunc(userHandler.Profile),
 		updateProfile:               http.HandlerFunc(userHandler.UpdateProfile),
 		profileStats:                http.HandlerFunc(userHandler.Stats),
+		hotTags:                     http.HandlerFunc(tagHandler.ListHot),
 		listPosts:                   http.HandlerFunc(postHandler.List),
 		getPost:                     http.HandlerFunc(postHandler.Get),
 		createPost:                  http.HandlerFunc(postHandler.Create),
@@ -235,6 +238,7 @@ type businessRouteDeps struct {
 	profile                     http.Handler
 	updateProfile               http.Handler
 	profileStats                http.Handler
+	hotTags                     http.Handler
 	listPosts                   http.Handler
 	getPost                     http.Handler
 	createPost                  http.Handler
@@ -277,6 +281,7 @@ func businessRoutes(deps businessRouteDeps) (router.BusinessRoutes, error) {
 		Profile:                     deps.tokens.Middleware(deps.profile),
 		UpdateProfile:               deps.tokens.Middleware(deps.updateProfile),
 		ProfileStats:                deps.tokens.Middleware(deps.profileStats),
+		HotTags:                     deps.hotTags,
 		ListPosts:                   deps.listPosts,
 		GetPost:                     deps.getPost,
 		CreatePost:                  deps.tokens.Middleware(deps.createPost),

@@ -43,3 +43,23 @@ func (r *SQLRepository) List(ctx context.Context, tx DBTX, postID int64) ([]Tag,
 	}
 	return tags, nil
 }
+
+func (r *SQLRepository) ListHotTags(ctx context.Context, tx DBTX, limit int) ([]HotTag, error) {
+	if limit <= 0 {
+		limit = 3
+	}
+	var tags []HotTag
+	if err := tx.SelectContext(ctx, &tags, `
+		SELECT pt.tag_name, COUNT(DISTINCT pt.post_id) AS post_count
+		FROM post_tags pt
+		JOIN posts p ON p.id = pt.post_id
+		WHERE p.deleted_at IS NULL
+		  AND pt.tag_name <> '正常'
+		  AND TRIM(pt.tag_name) <> ''
+		GROUP BY pt.tag_name
+		ORDER BY post_count DESC, pt.tag_name ASC
+		LIMIT ?`, limit); err != nil {
+		return nil, err
+	}
+	return tags, nil
+}

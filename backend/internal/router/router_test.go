@@ -73,6 +73,9 @@ func TestRouterMountsBusinessRoutes(t *testing.T) {
 		ProfileStats: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
+		HotTags: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
 		ListPosts: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
@@ -184,6 +187,7 @@ func TestRouterMountsBusinessRoutes(t *testing.T) {
 		{http.MethodGet, "/api/me", http.StatusOK},
 		{http.MethodPatch, "/api/me", http.StatusOK},
 		{http.MethodGet, "/api/me/stats", http.StatusOK},
+		{http.MethodGet, "/api/tags/hot", http.StatusOK},
 		{http.MethodGet, "/api/posts", http.StatusOK},
 		{http.MethodGet, "/api/posts/42", http.StatusOK},
 		{http.MethodPost, "/api/posts", http.StatusCreated},

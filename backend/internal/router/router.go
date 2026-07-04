@@ -20,6 +20,7 @@ type BusinessRoutes struct {
 	Profile                     http.Handler
 	UpdateProfile               http.Handler
 	ProfileStats                http.Handler
+	HotTags                     http.Handler
 	ListPosts                   http.Handler
 	GetPost                     http.Handler
 	CreatePost                  http.Handler
@@ -85,6 +86,9 @@ func NewWithBusinessRoutes(deps []Dependency, internal http.Handler, business Bu
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	mux.HandleFunc("GET /readyz", readyz(deps))
+	if business.HotTags != nil {
+		mux.Handle("GET /api/tags/hot", business.HotTags)
+	}
 	if business.ListPosts != nil {
 		mux.Handle("GET /api/posts", business.ListPosts)
 	} else {

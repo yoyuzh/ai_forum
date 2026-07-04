@@ -276,7 +276,15 @@ export interface AIStatusSnapshot {
   overallStatus: "IDLE" | "RUNNING" | "COMPLETED" | "FAILED";
 }
 
+export interface HotTag {
+  name: string;
+  postCount: number;
+}
+
 export interface ApiClient {
+  tags: {
+    hot: () => Promise<HotTag[]>;
+  };
   posts: {
     list: () => Promise<Post[]>;
     listByFilter: (tab: FeedTab, query?: string, tag?: string) => Promise<Post[]>;

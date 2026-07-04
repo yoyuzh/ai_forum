@@ -131,6 +131,24 @@ function titleFromContent(content: string): string {
 }
 
 export const mockApi: ApiClient = {
+  tags: {
+    hot: async () => {
+      const counts = new Map<string, number>();
+      for (const post of db.getPosts()) {
+        for (const tag of new Set(post.tags)) {
+          if (tag === "正常") continue;
+          counts.set(tag, (counts.get(tag) ?? 0) + 1);
+        }
+      }
+      return delay(
+        [...counts.entries()]
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .slice(0, 3)
+          .map(([name, postCount]) => ({ name, postCount })),
+      );
+    },
+  },
+
   posts: {
     list: async (): Promise<Post[]> => delay(db.getPosts()),
 

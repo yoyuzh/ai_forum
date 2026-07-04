@@ -19,11 +19,18 @@ import type {
   ApiClient,
   Comment,
   FeedTab,
+  HotTag,
   NotificationItem,
   Post,
   UserProfile,
   UserStats,
 } from "./types";
+
+type BackendHotTag = {
+  name: string;
+  post_count?: number;
+  postCount?: number;
+};
 
 type BackendPost = {
   id: number;
@@ -512,6 +519,14 @@ async function listPosts(): Promise<Post[]> {
 }
 
 export const realApi: ApiClient = {
+  tags: {
+    hot: async (): Promise<HotTag[]> =>
+      (await http<BackendHotTag[]>("/api/tags/hot?limit=3")).map((tag) => ({
+        name: tag.name,
+        postCount: tag.post_count ?? tag.postCount ?? 0,
+      })),
+  },
+
   posts: {
     list: listPosts,
     listByFilter: async (tab: FeedTab, query = "", tag?: string) => {
